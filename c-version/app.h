@@ -5,7 +5,7 @@
 
 #include "server.h"
 
-void HelloPage(HTTPReqMessage *, HTTPResMessage *);
-void Fib(HTTPReqMessage *, HTTPResMessage *);
+void HelloPage(HTTPReqMessage *, HTTPRespMessage *);
+void Fib(HTTPReqMessage *, HTTPRespMessage *);
 
 #endif

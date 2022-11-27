@@ -5,7 +5,7 @@
 
 /* Route */
 #ifndef MAX_HTTP_ROUTES
-#define MAX_HTTP_ROUTES  10
+#define MAX_HTTP_ROUTES 10
 #endif
 #if (ENABLE_STATIC_FILE == 1) && !(defined STATIC_FILE_FOLDER)
 #define STATIC_FILE_FOLDER "static/"
@@ -14,7 +14,7 @@
 /* Data type of server application function */
 typedef HTTPREQ_CALLBACK SAF;
 
-int AddRoute(HTTPMethod, char *, SAF);
-void Dispatch(HTTPReqMessage *, HTTPResMessage *);
+int AddRoute(HTTPMethod, const char *, SAF);
+void Dispatch(HTTPReqMessage *, HTTPRespMessage *);
 
 #endif

@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include "app.h"
 
-void HelloPage(HTTPReqMessage *req, HTTPResMessage *res) {
+void HelloPage(HTTPReqMessage *req, HTTPRespMessage *res) {
 	int n, i = 0, j;
 	char *p;
 	char header[] = "HTTP/1.1 200 OK\r\nConnection: close\r\n"
@@ -129,7 +129,7 @@ int fibnacci(int l) {
 	return sum;
 }
 
-void Fib(HTTPReqMessage *req, HTTPResMessage *res) {
+void Fib(HTTPReqMessage *req, HTTPRespMessage *res) {
 	int n, i = 0;
 	char *p;
 	char header[] = "HTTP/1.1 200 OK\r\nConnection: close\r\n"
