@@ -12,7 +12,7 @@
 #define MHS_PORT 8001
 #endif
 #ifndef MAX_HTTP_CLIENT
-#define MAX_HTTP_CLIENT 5
+#define MAX_HTTP_CLIENT 4
 #endif
 #ifndef HTTP_SERVER
 #define HTTP_SERVER "Micro CHTTP Server"
@@ -26,6 +26,7 @@ typedef struct _HTTPServer
     SOCKET _max_sock;
     fd_set _read_sock_pool;
     fd_set _write_sock_pool;
+    int available_connections;
 } HTTPServer;
 
 typedef struct _HTTPHeaderField

@@ -133,6 +133,8 @@ uint8_t _ReadStaticFiles(HTTPReqMessage *req, HTTPRespMessage *res)
 				res->_index = i;
 				res->fp = fp; // read the remainder from file!
             }
+        } else {
+            printf("Not found: '%s'\n", path);
         }
     }
 

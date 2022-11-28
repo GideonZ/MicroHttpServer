@@ -62,7 +62,7 @@ void HTTPServerInit(HTTPServer *srv, uint16_t port)
 
     /* Start server socket listening. */
     DebugMsg("Listening\n");
-    listen(srv->sock, MAX_HTTP_CLIENT);
+    listen(srv->sock, MAX_HTTP_CLIENT / 2);
 
     /* Append server socket to the master socket queue. */
     FD_ZERO(&(srv->_read_sock_pool));
@@ -78,6 +78,7 @@ void HTTPServerInit(HTTPServer *srv, uint16_t port)
         http_req[i].clisock = -1;
         http_req[i].work_state = NOTWORK_SOCKET;
     }
+    srv->available_connections = MAX_HTTP_CLIENT;
 }
 
 void _HTTPServerAccept(HTTPServer *srv)
@@ -96,10 +97,11 @@ void _HTTPServerAccept(HTTPServer *srv)
         /* Set the max socket file descriptor. */
         if (clisock > srv->_max_sock)
             srv->_max_sock = clisock;
-        DebugMsg("Accept 1 client.  %s:%d\n", inet_ntoa(cli_addr.sin_addr), (int)ntohs(cli_addr.sin_port));
         /* Add into HTTP client requests pool. */
         for (i = 0; i < MAX_HTTP_CLIENT; i++) {
             if (http_req[i].clisock == -1) {
+                DebugMsg("Accept client %d.  %s:%d\n", i, inet_ntoa(cli_addr.sin_addr), (int)ntohs(cli_addr.sin_port));
+                srv->available_connections -= 1;
                 http_req[i].clisock = clisock;
                 http_req[i].req.Header.Amount = 0;
                 http_req[i].res.Header.Amount = 0;
@@ -355,7 +357,7 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
     /* Wait the flag of any socket in readable socket queue. */
     select(srv->_max_sock + 1, &readable, &writeable, NULL, &timeout);
     /* Check server socket is readable. */
-    if (FD_ISSET(srv->sock, &readable)) {
+    if (FD_ISSET(srv->sock, &readable) && (srv->available_connections > 0)) {
         /* Accept when server socket has been connected. */
         _HTTPServerAccept(srv);
     }
@@ -383,6 +385,7 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
                     srv->_max_sock -= 1;
                 http_req[i].clisock = -1;
                 http_req[i].work_state = NOTWORK_SOCKET;
+                srv->available_connections += 1;
             }
         }
     }
