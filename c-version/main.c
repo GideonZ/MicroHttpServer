@@ -1,5 +1,6 @@
 #include "server.h"
 #include "middleware.h"
+#include "url.h"
 #include "app.h"
 
 /* The HTTP server of this process. */

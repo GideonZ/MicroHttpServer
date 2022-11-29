@@ -15,6 +15,7 @@
 typedef HTTPREQ_CALLBACK SAF;
 
 int AddRoute(HTTPMethod, const char *, SAF);
+void Api(HTTPReqMessage *, HTTPRespMessage *);
 void Dispatch(HTTPReqMessage *, HTTPRespMessage *);
 
 #endif

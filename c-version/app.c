@@ -2,7 +2,10 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include "app.h"
+#include "url.h"
+
 
 void HelloPage(HTTPReqMessage *req, HTTPRespMessage *res) {
 	int n, i = 0, j;
