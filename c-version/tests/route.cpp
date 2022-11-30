@@ -34,7 +34,9 @@ protected:
     std::string command;
     std::string querystring;
 
-    struct Parameter **parameters;
+    const size_t psize = sizeof(struct Parameter);
+
+    struct Parameter *parameters;
     size_t len;
 };
 
@@ -42,22 +44,6 @@ protected:
 ///////////////////////////////////////////////////////////////
 //                  URL COMPONENTS TESTS                     //
 ///////////////////////////////////////////////////////////////
-
-TEST_F(RouteTest, UrlComponents) {
-    struct UrlComponents *c;
-    c = new_url_components("GET", "v1", "files", "foo/", "create", "one=1&two=2");
-
-    MakeComponentParts(c);
-
-    EXPECT_EQ("GET", method);
-    EXPECT_EQ("v1", apiversion);
-    EXPECT_EQ("files", route);
-    EXPECT_EQ("foo/", path);
-    EXPECT_EQ("create", command);
-    EXPECT_EQ("one=1&two=2", querystring);
-
-    delete_url_components(c);
-}
 
 TEST_F(RouteTest, ParseUrl_RoutePathCommandQuerystring) {
     struct UrlComponents *c;
@@ -171,10 +157,8 @@ TEST_F(RouteTest, ParseQS_OneParameter) {
     parameters = parse_querystring(q, &len);
 
     EXPECT_EQ(1, len);
-    EXPECT_EQ("hej", std::string(parameters[0]->name));
-    EXPECT_EQ("foo", std::string(parameters[0]->value));
-
-    delete_parameters(parameters, len);
+    EXPECT_EQ("hej", std::string(parameters->name));
+    EXPECT_EQ("foo", std::string(parameters->value));
 }
 
 TEST_F(RouteTest, ParseQS_NoPairEndAmp) {
@@ -182,12 +166,10 @@ TEST_F(RouteTest, ParseQS_NoPairEndAmp) {
     parameters = parse_querystring(q, &len);
 
     EXPECT_EQ(2, len);
-    EXPECT_EQ("abc", std::string(parameters[0]->name));
-    EXPECT_EQ("", std::string(parameters[0]->value));
-    EXPECT_EQ("", std::string(parameters[1]->name));
-    EXPECT_EQ("", std::string(parameters[1]->value));
-
-    delete_parameters(parameters, len);
+    EXPECT_EQ("abc", std::string(parameters->name));
+    EXPECT_EQ("", std::string(parameters->value));
+    EXPECT_EQ("", std::string((parameters+psize)->name));
+    EXPECT_EQ("", std::string((parameters+psize)->value));
 }
 
 TEST_F(RouteTest, ParseQS_TwoNoPair) {
@@ -195,12 +177,10 @@ TEST_F(RouteTest, ParseQS_TwoNoPair) {
     parameters = parse_querystring(q, &len);
 
     EXPECT_EQ(2, len);
-    EXPECT_EQ("one", std::string(parameters[0]->name));
-    EXPECT_EQ("", std::string(parameters[0]->value));
-    EXPECT_EQ("two", std::string(parameters[1]->name));
-    EXPECT_EQ("", std::string(parameters[1]->value));
-
-    delete_parameters(parameters, len);
+    EXPECT_EQ("one", std::string(parameters->name));
+    EXPECT_EQ("", std::string(parameters->value));
+    EXPECT_EQ("two", std::string((parameters+psize)->name));
+    EXPECT_EQ("", std::string((parameters+psize)->value));
 }
 
 TEST_F(RouteTest, ParseQS_TwoLastIsPair) {
@@ -208,12 +188,10 @@ TEST_F(RouteTest, ParseQS_TwoLastIsPair) {
     parameters = parse_querystring(q, &len);
 
     EXPECT_EQ(2, len);
-    EXPECT_EQ("one", std::string(parameters[0]->name));
-    EXPECT_EQ("", std::string(parameters[0]->value));
-    EXPECT_EQ("two", std::string(parameters[1]->name));
-    EXPECT_EQ("pair", std::string(parameters[1]->value));
-
-    delete_parameters(parameters, len);
+    EXPECT_EQ("one", std::string(parameters->name));
+    EXPECT_EQ("", std::string(parameters->value));
+    EXPECT_EQ("two", std::string((parameters+psize)->name));
+    EXPECT_EQ("pair", std::string((parameters+psize)->value));
 }
 
 TEST_F(RouteTest, ParseQS_OnlyAmp) {
@@ -221,12 +199,10 @@ TEST_F(RouteTest, ParseQS_OnlyAmp) {
     parameters = parse_querystring(q, &len);
 
     EXPECT_EQ(3, len);
-    EXPECT_EQ("", std::string(parameters[0]->name));
-    EXPECT_EQ("", std::string(parameters[0]->value));
-    EXPECT_EQ("", std::string(parameters[1]->name));
-    EXPECT_EQ("", std::string(parameters[1]->value));
-    EXPECT_EQ("", std::string(parameters[2]->name));
-    EXPECT_EQ("", std::string(parameters[2]->value));
-
-    delete_parameters(parameters, len);
+    EXPECT_EQ("", std::string(parameters->name));
+    EXPECT_EQ("", std::string(parameters->value));
+    EXPECT_EQ("", std::string((parameters+psize)->name));
+    EXPECT_EQ("", std::string((parameters+psize)->value));
+    EXPECT_EQ("", std::string((parameters+2*psize)->name));
+    EXPECT_EQ("", std::string((parameters+2*psize)->value));
 }
