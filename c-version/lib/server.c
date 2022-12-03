@@ -1,5 +1,4 @@
 #include "server.h"
-#include <arpa/inet.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
@@ -348,14 +347,15 @@ void _HTTPServerRequest(HTTPReq *hr, HTTPREQ_CALLBACK callback)
 void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
 {
     fd_set readable, writeable;
-    struct timeval timeout = {0, 0};
+    //struct timeval timeout = {5, 5};
     uint16_t i;
 
     /* Copy master socket queue to readable, writeable socket queue. */
     readable = srv->_read_sock_pool;
     writeable = srv->_write_sock_pool;
     /* Wait the flag of any socket in readable socket queue. */
-    select(srv->_max_sock + 1, &readable, &writeable, NULL, &timeout);
+    select(srv->_max_sock + 1, &readable, &writeable, NULL, NULL); // &timeout);
+    printf("$");
     /* Check server socket is readable. */
     if (FD_ISSET(srv->sock, &readable) && (srv->available_connections > 0)) {
         /* Accept when server socket has been connected. */
