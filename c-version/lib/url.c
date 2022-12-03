@@ -91,13 +91,11 @@ void delete_url_components(UrlComponents *components) {
 	components = NULL; // only sets components to NULL on the stack, and then leaves, abandoning the stack
 }
 
-UrlComponents *parse_url_header(HTTPReqHeader *hdr)
+int parse_header_to_url_components(HTTPReqHeader *hdr, UrlComponents *c)
 {
-	UrlComponents *c = parse_url(hdr->URI);
-	if (c) {
-		c->method = hdr->Method;
-	}
-	return c;
+	int ret = parse_url_static(hdr->URI, c);
+	c->method = hdr->Method;
+	return ret;
 }
 
 int parse_url_static(const char *url, UrlComponents *components)
@@ -160,4 +158,13 @@ UrlComponents *parse_url(const char *url)
 	components->parameters = parse_querystring(components->querystring_copy, &(components->parameters_len));
 
 	return components;
+}
+
+UrlComponents *parse_url_header(HTTPReqHeader *hdr)
+{
+	UrlComponents *c = parse_url(hdr->URI);
+	if (c) {
+		c->method = hdr->Method;
+	}
+	return c;
 }

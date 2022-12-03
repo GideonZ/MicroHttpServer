@@ -48,12 +48,21 @@ Returns a pointer to an allocated UrlComponents, which should be freed using
 delete_url_components().
 */
 UrlComponents *parse_url(const char *url);
+UrlComponents *parse_url_header(HTTPReqHeader *hdr);
 
 /*
-Parse the url inside of the given header and extract all parts. Makes a call to new_url_components().
-Returns a pointer to an allocated UrlComponents, which should be freed using
-delete_url_components(). This function also sets the method.
+Parse the url inside of the given header and extract all parts into a preallocated
+UrlComponents struct. Does NOT create a new_url_components(). Also, does NOT
+parse the query string, but will simply return the complete query string.
 */
-UrlComponents *parse_url_header(HTTPReqHeader *hdr);
+int parse_url_static(const char *url, UrlComponents *c);
+
+/*
+Parse the url inside of the given header and extract all parts into a preallocated
+UrlComponents struct. Does NOT create a new_url_components(). Also, does NOT
+parse the query string, but will simply return the complete query string.
+This function will also set the http method correctly.
+*/
+int parse_header_to_url_components(HTTPReqHeader *hdr, UrlComponents *c);
 
 #endif

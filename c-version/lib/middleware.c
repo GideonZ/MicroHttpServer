@@ -235,7 +235,7 @@ void Dispatch(HTTPReqMessage *req, HTTPRespMessage *res)
 
     if (found != 1) {
         UrlComponents *c;
-        if ((c = parse_url_header(&req->Header))) {
+        if ((c = parse_url_header(&req->Header)) != NULL) {
             Api(c, res);
             /*
             printf("method: %d\nroute: %s\npath: %s\ncommand: %s\nquerystring: %s\nlength: %d\n",
