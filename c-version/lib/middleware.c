@@ -60,7 +60,7 @@ const char *default_mime_type = "text/plain";
 // typedef enum { HTTP_UNKNOWN, HTTP_GET, HTTP_POST, HTTP_PUT, HTTP_DELETE } HTTPMethod;
 const char *c_method_strings[] = { "BAD", "GET", "POST", "PUT", "DELETE" };
 
-void Api(HTTPReqMessage *req, HTTPRespMessage *res) {
+void Api(UrlComponents *c, HTTPRespMessage *res) {
     int n, i = 0;
     char *p;
     char header[] = "HTTP/1.1 200 OK\r\nConnection: close\r\n"
@@ -74,9 +74,6 @@ void Api(HTTPReqMessage *req, HTTPRespMessage *res) {
     i += n;
 
     /* Build body. */
-
-    struct UrlComponents *c;
-    c = parse_url(req->Header.URI);
     char comp[1024];
     sprintf(comp, "<h1>Data</h1><ul>"
                     "<li>method: %s</li>"
@@ -99,7 +96,13 @@ void Api(HTTPReqMessage *req, HTTPRespMessage *res) {
         i += n;
         p += n;
     }
-    p -= n;
+    const char *closing = "</ul>\n";
+    n = strlen(closing);
+    memcpy(p, closing, n);
+    i += n;
+    p += n;
+
+    //p -= n;
 
     res->_index = i;
 }
@@ -231,11 +234,11 @@ void Dispatch(HTTPReqMessage *req, HTTPRespMessage *res)
     }
 
     if (found != 1) {
-        struct UrlComponents *c;
-        if ((c = parse_url(req->Header.URI))) {
-            Api(req, res);
+        UrlComponents *c;
+        if ((c = parse_url_header(&req->Header))) {
+            Api(c, res);
             /*
-            printf("method: %s\nroute: %s\npath: %s\ncommand: %s\nquerystring: %s\nlength: %d\n",
+            printf("method: %d\nroute: %s\npath: %s\ncommand: %s\nquerystring: %s\nlength: %d\n",
             c->method, c->route, c->path, c->command, c->querystring, c->parameters_len);
             for (int i = 0; i < c->parameters_len; i++) {
                 printf("'%s' is '%s'\n", c->parameters[i]->name, c->parameters[i]->value);

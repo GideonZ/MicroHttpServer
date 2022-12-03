@@ -16,7 +16,7 @@ protected:
     void TearDown() override {
     }
 
-    void MakeComponentParts(struct UrlComponents *c) {
+    void MakeComponentParts(UrlComponents *c) {
         method = c->method;
         apiversion = c->apiversion;
         route = c->route;
@@ -46,7 +46,7 @@ protected:
 ///////////////////////////////////////////////////////////////
 
 TEST_F(RouteTest, ParseUrl_RoutePathCommandQuerystring) {
-    struct UrlComponents *c;
+    UrlComponents *c;
 
     c = parse_url("/v1/files/some/path/to/disk.d64:createDiskImage?type=d64&format=json");
 
@@ -63,7 +63,7 @@ TEST_F(RouteTest, ParseUrl_RoutePathCommandQuerystring) {
 }
 
 TEST_F(RouteTest, ParseUrl_Route) {
-    struct UrlComponents *c;
+    UrlComponents *c;
 
     c = parse_url("/v1/files");
 
@@ -79,14 +79,14 @@ TEST_F(RouteTest, ParseUrl_Route) {
 }
 
 TEST_F(RouteTest, ParseUrl_Empty) {
-    struct UrlComponents *c;
+    UrlComponents *c;
 
     c = parse_url("");
     EXPECT_EQ(nullptr, c);
 }
 
 TEST_F(RouteTest, ParseUrl_RoutePath) {
-    struct UrlComponents *c;
+    UrlComponents *c;
 
     c = parse_url("v1/route/some/path/");
 
@@ -102,7 +102,7 @@ TEST_F(RouteTest, ParseUrl_RoutePath) {
 }
 
 TEST_F(RouteTest, ParseUrl_RouteCommand) {
-    struct UrlComponents *c;
+    UrlComponents *c;
 
     c = parse_url("v1/route:command");
 
@@ -118,7 +118,7 @@ TEST_F(RouteTest, ParseUrl_RouteCommand) {
 }
 
 TEST_F(RouteTest, ParseUrl_RouteQuerystring) {
-    struct UrlComponents *c;
+    UrlComponents *c;
 
     c = parse_url("v1/route?querystring");
 
@@ -134,7 +134,7 @@ TEST_F(RouteTest, ParseUrl_RouteQuerystring) {
 }
 
 TEST_F(RouteTest, ParseUrl_UnsupportedApiVersion) {
-    struct UrlComponents *c;
+    UrlComponents *c;
 
     c = parse_url("/v64/route?querystring");
 

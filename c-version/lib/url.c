@@ -53,16 +53,17 @@ struct Parameter *parse_querystring(char *querystring_copy, size_t *parameters_l
 	return parameters;
 }
 
-struct UrlComponents *new_url_components(
+/*
+UrlComponents *new_url_components(
 		char *url_copy,
 		const char *apiversion,
 		const char *route,
 		const char *path,
 		const char *command,
 		const char *querystring) {
-	struct UrlComponents *c;
+	UrlComponents *c;
 
-	if (!(c = (struct UrlComponents *)malloc(sizeof(*c)))) {
+	if (!(c = (UrlComponents *)malloc(sizeof(*c)))) {
 		return NULL;
 	};
 	c->method = HTTP_GET;
@@ -73,13 +74,13 @@ struct UrlComponents *new_url_components(
 	c->querystring = querystring;
 	c->url_copy = url_copy;
 	c->querystring_copy = strdup(querystring);
-
 	c->parameters = parse_querystring(c->querystring_copy, &(c->parameters_len));
 
 	return c;
 }
+*/
 
-void delete_url_components(struct UrlComponents *components) {
+void delete_url_components(UrlComponents *components) {
 	free(components->parameters);
 	components->parameters = NULL;
 	free(components->url_copy);
@@ -90,19 +91,17 @@ void delete_url_components(struct UrlComponents *components) {
 	components = NULL; // only sets components to NULL on the stack, and then leaves, abandoning the stack
 }
 
-struct UrlComponents *parse_url_header(HTTPReqHeader *hdr)
+UrlComponents *parse_url_header(HTTPReqHeader *hdr)
 {
-	struct UrlComponents *c = parse_url(hdr->URI);
+	UrlComponents *c = parse_url(hdr->URI);
 	if (c) {
 		c->method = hdr->Method;
 	}
 	return c;
 }
 
-struct UrlComponents *parse_url(const char *url) {
-	struct UrlComponents *components;
-	const char *apiversion, *route, *path, *command, *querystring;
-
+int parse_url_static(const char *url, UrlComponents *components)
+{
 	int supported_version = 0;
 
 	char *url_copy, *url_start, *token;
@@ -113,33 +112,52 @@ struct UrlComponents *parse_url(const char *url) {
 	static const char *empty = "";
 
 	// Consume apiversion first (a little dirty, but we need to handle it some way)
-	apiversion = strsep(&token, "/");
-	url_start = token = url_start+strlen(apiversion)+1;
+	components->apiversion = strsep(&token, "/");
+	url_start = token = url_start+strlen(components->apiversion)+1;
 
 	for (int i = 0; supported_apiversions[i] != NULL; i++) {
-		if (!strcmp(apiversion, supported_apiversions[i])) {
+		if (!strcmp(components->apiversion, supported_apiversions[i])) {
 			supported_version = 1;
 		}
 	}
 
 	if (!supported_version) {
 		free(url_copy);
-		return NULL;
+		return -1; // Not supported
 	}
 
 	// Separate querystring
-	SPLIT(querystring, "?");
+	SPLIT(components->querystring, "?");
 
 	// Separate command
-	SPLIT(command, ":");
+	SPLIT(components->command, ":");
 
 	// Separate path
-	SPLIT(path, "/");
+	SPLIT(components->path, "/");
 
 	// Route is all that is left
-	route = url_start;
+	components->route = url_start;
+	components->url_copy = url_copy;
 
-	components = new_url_components(url_copy, apiversion, route, path, command, querystring);
+	// Defaults
+	components->method = HTTP_GET; // default
+	components->parameters_len = 0;
+	components->parameters = NULL;
+	components->querystring_copy = NULL;
+	return 0;
+}
+
+UrlComponents *parse_url(const char *url)
+{
+	// C-style 'new'.
+	UrlComponents *components = (UrlComponents *)malloc(sizeof(UrlComponents));
+	if (parse_url_static(url, components)) {
+		free(components);
+		return NULL;
+	}
+
+	components->querystring_copy = strdup(components->querystring);
+	components->parameters = parse_querystring(components->querystring_copy, &(components->parameters_len));
 
 	return components;
 }
