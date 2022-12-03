@@ -1,6 +1,8 @@
 #ifndef __URL_H__
 #define __URL_H__
 
+#include "server.h"
+
 #define MAX_STR_LEN 512
 
 struct Parameter {
@@ -9,7 +11,7 @@ struct Parameter {
 };
 
 struct UrlComponents {
-    const char *method;
+    HTTPMethod  method;
     const char *apiversion;
     const char *route;
     const char *path;
@@ -33,7 +35,7 @@ struct Parameter *parse_querystring(char *querystring, size_t *parameters_len);
 Extract the different parts of the url. Allocates memory for a struct UrlComponents. Makes a call
 to parse_querystring() which also allocates memory.
 */
-struct UrlComponents *new_url_components(char *url_copy, const char *method, const char *apiversion, const char *route, const char *path, const char *command, const char *querystring);
+struct UrlComponents *new_url_components(char *url_copy, const char *apiversion, const char *route, const char *path, const char *command, const char *querystring);
 
 /*
 Free all memory allocated by new_url_components(). Makes a call to delete_parameters().
@@ -46,5 +48,12 @@ Returns a pointer to an allocated struct UrlComponents, which should be freed us
 delete_url_components().
 */
 struct UrlComponents *parse_url(const char *url);
+
+/*
+Parse the url inside of the given header and extract all parts. Makes a call to new_url_components().
+Returns a pointer to an allocated struct UrlComponents, which should be freed using
+delete_url_components(). This function also sets the method.
+*/
+struct UrlComponents *parse_url_header(HTTPReqHeader *hdr);
 
 #endif

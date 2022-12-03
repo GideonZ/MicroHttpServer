@@ -55,7 +55,6 @@ struct Parameter *parse_querystring(char *querystring_copy, size_t *parameters_l
 
 struct UrlComponents *new_url_components(
 		char *url_copy,
-		const char *method,
 		const char *apiversion,
 		const char *route,
 		const char *path,
@@ -66,7 +65,7 @@ struct UrlComponents *new_url_components(
 	if (!(c = (struct UrlComponents *)malloc(sizeof(*c)))) {
 		return NULL;
 	};
-	c->method = method;
+	c->method = HTTP_GET;
 	c->apiversion = apiversion;
 	c->route = route;
 	c->path = path;
@@ -89,6 +88,15 @@ void delete_url_components(struct UrlComponents *components) {
 	components->querystring_copy = NULL;
 	free(components);
 	components = NULL; // only sets components to NULL on the stack, and then leaves, abandoning the stack
+}
+
+struct UrlComponents *parse_url_header(HTTPReqHeader *hdr)
+{
+	struct UrlComponents *c = parse_url(hdr->URI);
+	if (c) {
+		c->method = hdr->Method;
+	}
+	return c;
 }
 
 struct UrlComponents *parse_url(const char *url) {
@@ -131,7 +139,7 @@ struct UrlComponents *parse_url(const char *url) {
 	// Route is all that is left
 	route = url_start;
 
-	components = new_url_components(url_copy, "GET", apiversion, route, path, command, querystring);
+	components = new_url_components(url_copy, apiversion, route, path, command, querystring);
 
 	return components;
 }

@@ -12,9 +12,9 @@
 #ifndef MHS_PORT
 #define MHS_PORT 80
 #define close lwip_close
-#include <lwip/inet.h>
+#define LWIP 1
 #else
-#include <arpa/inet.h>
+#define LWIP 0
 #endif
 
 #ifndef MAX_HTTP_CLIENT
@@ -45,7 +45,7 @@ typedef struct _HTTPHeaderField
 #define MAX_HEADER_FIELDS 20
 #endif
 
-typedef enum { HTTP_GET, HTTP_POST, HTTP_PUT, HTTP_DELETE, HTTP_NUM_METHOD } HTTPMethod;
+typedef enum { HTTP_UNKNOWN, HTTP_GET, HTTP_POST, HTTP_PUT, HTTP_DELETE } HTTPMethod;
 
 typedef struct _HTTPReqHeader
 {

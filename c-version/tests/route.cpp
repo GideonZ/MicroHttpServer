@@ -27,7 +27,7 @@ protected:
 
     // Class members are accessible from test cases. Reinitiated before each test.
 
-    std::string method;
+    HTTPMethod  method;
     std::string apiversion;
     std::string route;
     std::string path;
@@ -52,7 +52,7 @@ TEST_F(RouteTest, ParseUrl_RoutePathCommandQuerystring) {
 
     MakeComponentParts(c);
 
-    EXPECT_EQ("GET", method);
+    EXPECT_EQ(HTTP_GET, method);
     EXPECT_EQ("v1", apiversion);
     EXPECT_EQ("files", route);
     EXPECT_EQ("some/path/to/disk.d64", path);
@@ -69,7 +69,7 @@ TEST_F(RouteTest, ParseUrl_Route) {
 
     MakeComponentParts(c);
 
-    EXPECT_EQ("GET", method);
+    EXPECT_EQ(HTTP_GET, method);
     EXPECT_EQ("files", route);
     EXPECT_EQ("", path);
     EXPECT_EQ("", command);
@@ -92,7 +92,7 @@ TEST_F(RouteTest, ParseUrl_RoutePath) {
 
     MakeComponentParts(c);
 
-    EXPECT_EQ("GET", method);
+    EXPECT_EQ(HTTP_GET, method);
     EXPECT_EQ("route", route);
     EXPECT_EQ("some/path/", path);
     EXPECT_EQ("", command);
@@ -108,7 +108,7 @@ TEST_F(RouteTest, ParseUrl_RouteCommand) {
 
     MakeComponentParts(c);
 
-    EXPECT_EQ("GET", method);
+    EXPECT_EQ(HTTP_GET, method);
     EXPECT_EQ("route", route);
     EXPECT_EQ("", path);
     EXPECT_EQ("command", command);
@@ -124,7 +124,7 @@ TEST_F(RouteTest, ParseUrl_RouteQuerystring) {
 
     MakeComponentParts(c);
 
-    EXPECT_EQ("GET", method);
+    EXPECT_EQ(HTTP_GET, method);
     EXPECT_EQ("route", route);
     EXPECT_EQ("", path);
     EXPECT_EQ("", command);

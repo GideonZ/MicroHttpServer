@@ -1,4 +1,9 @@
 #include "server.h"
+#if LWIP == 1
+#include <lwip/inet.h>
+#else
+#include <arpa/inet.h>
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>

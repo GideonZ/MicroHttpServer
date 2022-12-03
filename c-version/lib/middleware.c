@@ -57,6 +57,9 @@ mime_map meme_types [] = {
 
 const char *default_mime_type = "text/plain";
 
+// typedef enum { HTTP_UNKNOWN, HTTP_GET, HTTP_POST, HTTP_PUT, HTTP_DELETE } HTTPMethod;
+const char *c_method_strings[] = { "BAD", "GET", "POST", "PUT", "DELETE" };
+
 void Api(HTTPReqMessage *req, HTTPRespMessage *res) {
     int n, i = 0;
     char *p;
@@ -83,7 +86,7 @@ void Api(HTTPReqMessage *req, HTTPRespMessage *res) {
                     "<li>querystring: %s</li>"
                     "<li>length: %d</li></ul>"
                     "<h3>Parameters</h3><ul>",
-    c->method, c->route, c->path, c->command, c->querystring, (int)c->parameters_len);
+    c_method_strings[c->method], c->route, c->path, c->command, c->querystring, (int)c->parameters_len);
     n = strlen(comp);
     memcpy(p, comp, n);
     i += n;
