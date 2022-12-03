@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #endif
 #include "middleware.h"
+#include "url.h"
 
 /* Route */
 typedef struct _Route
@@ -56,6 +57,50 @@ mime_map meme_types [] = {
 
 const char *default_mime_type = "text/plain";
 
+void Api(HTTPReqMessage *req, HTTPRespMessage *res) {
+    int n, i = 0;
+    char *p;
+    char header[] = "HTTP/1.1 200 OK\r\nConnection: close\r\n"
+                    "Content-Type: text/html; charset=UTF-8\r\n\r\n";
+
+    /* Build header. */
+    p = (char *)res->_buf;
+    n = strlen(header);
+    memcpy(p, header, n);
+    p += n;
+    i += n;
+
+    /* Build body. */
+
+    struct UrlComponents *c;
+    c = parse_url(req->Header.URI);
+    char comp[1024];
+    sprintf(comp, "<h1>Data</h1><ul>"
+                    "<li>method: %s</li>"
+                    "<li>route: %s</li>"
+                    "<li>path: %s</li>"
+                    "<li>command: %s</li>"
+                    "<li>querystring: %s</li>"
+                    "<li>length: %d</li></ul>"
+                    "<h3>Parameters</h3><ul>",
+    c->method, c->route, c->path, c->command, c->querystring, (int)c->parameters_len);
+    n = strlen(comp);
+    memcpy(p, comp, n);
+    i += n;
+    p += n;
+
+    for (int j = 0; j < c->parameters_len; j++) {
+        sprintf(comp, "<li>%s: <tt>%s</tt></li>", (c->parameters+(sizeof(struct Parameter)*j))->name, (c->parameters+(sizeof(struct Parameter)*j))->value);
+        n = strlen(comp);
+        memcpy(p, comp, n);
+        i += n;
+        p += n;
+    }
+    p -= n;
+
+    res->_index = i;
+}
+
 static const char *get_mime_type(const char *filename)
 {
     const char *dot = strrchr(filename, '.');
@@ -102,7 +147,7 @@ uint8_t _ReadStaticFiles(HTTPReqMessage *req, HTTPRespMessage *res)
         }
     }
 
-	res->fp = NULL;
+    res->fp = NULL;
 
     if ((depth >= 0) && (uri[i - 1] != '/')) {
         /* Try to open and load the static file. */
@@ -126,12 +171,12 @@ uint8_t _ReadStaticFiles(HTTPReqMessage *req, HTTPRespMessage *res)
                 i += n;
                 res->_index = i;
                 fclose(fp);
-				res->fp = NULL;
+                res->fp = NULL;
             } else { // use streaming mode
                 n = fread(res->_buf + i, 1, MAX_BODY_SIZE, fp);
-				i += n;
-				res->_index = i;
-				res->fp = fp; // read the remainder from file!
+                i += n;
+                res->_index = i;
+                res->fp = fp; // read the remainder from file!
             }
         } else {
             printf("Not found: '%s'\n", path);
@@ -179,6 +224,21 @@ void Dispatch(HTTPReqMessage *req, HTTPRespMessage *res)
             } else {
                 found = 0;
             }
+        }
+    }
+
+    if (found != 1) {
+        struct UrlComponents *c;
+        if ((c = parse_url(req->Header.URI))) {
+            Api(req, res);
+            /*
+            printf("method: %s\nroute: %s\npath: %s\ncommand: %s\nquerystring: %s\nlength: %d\n",
+            c->method, c->route, c->path, c->command, c->querystring, c->parameters_len);
+            for (int i = 0; i < c->parameters_len; i++) {
+                printf("'%s' is '%s'\n", c->parameters[i]->name, c->parameters[i]->value);
+            }
+            */
+            found = 1;
         }
     }
 
