@@ -3,14 +3,6 @@
 
 #define MAX_STR_LEN 512
 
-// Helper macro for url parsing
-#define SPLIT(right, delm) {\
-	strsep(&token, delm);\
-	if (token == NULL) right = empty;\
-	else right = token;\
-	token = url_start;\
-}
-
 struct Parameter {
     const char *name;
     const char *value;

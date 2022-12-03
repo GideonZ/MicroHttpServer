@@ -6,6 +6,14 @@
 
 #include "url.h"
 
+// Helper macro for url parsing
+#define SPLIT(right, delm) {\
+	char *token = url_start; \
+	strsep(&token, delm);\
+	if (token == NULL) right = empty;\
+	else right = token; \
+}
+
 const char *supported_apiversions[] = {
     "v1",
     //"v2",
@@ -23,22 +31,22 @@ struct Parameter *parse_querystring(char *querystring_copy, size_t *parameters_l
 	}
 
 	*parameters_len = 1;
-	for (uint16_t i = 0; i < strlen(querystring_copy); i++) {
+	for (int i = 0; i < strlen(querystring_copy); i++) {
 		if (querystring_copy[i] == '&') (*parameters_len)++;
 	}
 
 	parameters = (struct Parameter *)malloc(*parameters_len * sizeof(struct Parameter));
 
-	uint16_t index = 0;
+	int index = 0;
 	while ((value = token = strsep(&querystring_copy, "&")) != NULL) {
 		name = strsep(&value, "=");
 		if (value == NULL) {
 			name = token;
 			value = token+strlen(token); // Empty string
 		}
-		struct Parameter *parameter = parameters + index++ * sizeof(struct Parameter);
-		parameter->name = name;
-		parameter->value = value;
+		parameters[index].name = name;
+		parameters[index].value = value;
+		index++;
 	}
 
 	return parameters;
@@ -63,11 +71,10 @@ struct UrlComponents *new_url_components(
 	c->path = path;
 	c->command = command;
 	c->querystring = querystring;
-
 	c->url_copy = url_copy;
-	c->querystring_copy = strndup(querystring, strlen(querystring));
+	//	c->querystring_copy = strndup(querystring, strlen(querystring));
 
-	c->parameters = parse_querystring(c->querystring_copy, &(c->parameters_len));
+	c->parameters = parse_querystring(url_copy, &(c->parameters_len));
 
 	return c;
 }
@@ -78,33 +85,34 @@ void delete_url_components(struct UrlComponents *components) {
 	free(components->url_copy);
 	components->url_copy = NULL;
 	free(components);
-	components = NULL;
+	components = NULL; // only sets components to NULL on the stack, and then leaves, abandoning the stack
 }
 
 struct UrlComponents *parse_url(const char *url) {
 	struct UrlComponents *components;
-	char *apiversion, *route, *path, *command, *querystring;
+	const char *apiversion, *route, *path, *command, *querystring;
 
-	uint8_t supported_version = 0;
+	int supported_version = 0;
 
 	char *url_copy, *url_start, *token;
 
 	if (url[0] == '/') url++;
 
-	url_copy = token = url_start = strndup(url, strlen(url));
-	char *empty = url_copy + strlen(url_copy); // Guaranteed empty string
+	url_copy = token = url_start = strdup(url);
+	static const char *empty = "";
 
 	// Consume apiversion first (a little dirty, but we need to handle it some way)
 	apiversion = strsep(&token, "/");
 	url_start = token = url_start+strlen(apiversion)+1;
 
-	for (uint8_t i = 0; supported_apiversions[i] != NULL; i++) {
+	for (int i = 0; supported_apiversions[i] != NULL; i++) {
 		if (!strcmp(apiversion, supported_apiversions[i])) {
 			supported_version = 1;
 		}
 	}
 
 	if (!supported_version) {
+		free(url_copy);
 		return NULL;
 	}
 

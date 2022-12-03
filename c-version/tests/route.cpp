@@ -34,7 +34,7 @@ protected:
     std::string command;
     std::string querystring;
 
-    const size_t psize = sizeof(struct Parameter);
+//    const size_t psize = sizeof(struct Parameter);
 
     struct Parameter *parameters;
     size_t len;
@@ -150,6 +150,7 @@ TEST_F(RouteTest, ParseQS_Empty) {
     parse_querystring(q, &len);
 
     EXPECT_EQ(0, len);
+
 }
 
 TEST_F(RouteTest, ParseQS_OneParameter) {
@@ -159,6 +160,8 @@ TEST_F(RouteTest, ParseQS_OneParameter) {
     EXPECT_EQ(1, len);
     EXPECT_EQ("hej", std::string(parameters->name));
     EXPECT_EQ("foo", std::string(parameters->value));
+
+    free(parameters);
 }
 
 TEST_F(RouteTest, ParseQS_NoPairEndAmp) {
@@ -166,10 +169,12 @@ TEST_F(RouteTest, ParseQS_NoPairEndAmp) {
     parameters = parse_querystring(q, &len);
 
     EXPECT_EQ(2, len);
-    EXPECT_EQ("abc", std::string(parameters->name));
-    EXPECT_EQ("", std::string(parameters->value));
-    EXPECT_EQ("", std::string((parameters+psize)->name));
-    EXPECT_EQ("", std::string((parameters+psize)->value));
+    EXPECT_EQ("abc", std::string(parameters[0].name));
+    EXPECT_EQ("", std::string(parameters[0].value));
+    EXPECT_EQ("", std::string(parameters[1].name));
+    EXPECT_EQ("", std::string(parameters[1].value));
+
+    free(parameters);
 }
 
 TEST_F(RouteTest, ParseQS_TwoNoPair) {
@@ -177,10 +182,12 @@ TEST_F(RouteTest, ParseQS_TwoNoPair) {
     parameters = parse_querystring(q, &len);
 
     EXPECT_EQ(2, len);
-    EXPECT_EQ("one", std::string(parameters->name));
-    EXPECT_EQ("", std::string(parameters->value));
-    EXPECT_EQ("two", std::string((parameters+psize)->name));
-    EXPECT_EQ("", std::string((parameters+psize)->value));
+    EXPECT_EQ("one", std::string(parameters[0].name));
+    EXPECT_EQ("", std::string(parameters[0].value));
+    EXPECT_EQ("two", std::string(parameters[1].name));
+    EXPECT_EQ("", std::string(parameters[1].value));
+
+    free(parameters);
 }
 
 TEST_F(RouteTest, ParseQS_TwoLastIsPair) {
@@ -190,8 +197,10 @@ TEST_F(RouteTest, ParseQS_TwoLastIsPair) {
     EXPECT_EQ(2, len);
     EXPECT_EQ("one", std::string(parameters->name));
     EXPECT_EQ("", std::string(parameters->value));
-    EXPECT_EQ("two", std::string((parameters+psize)->name));
-    EXPECT_EQ("pair", std::string((parameters+psize)->value));
+    EXPECT_EQ("two", std::string(parameters[1].name));
+    EXPECT_EQ("pair", std::string(parameters[1].value));
+
+    free(parameters);
 }
 
 TEST_F(RouteTest, ParseQS_OnlyAmp) {
@@ -199,10 +208,12 @@ TEST_F(RouteTest, ParseQS_OnlyAmp) {
     parameters = parse_querystring(q, &len);
 
     EXPECT_EQ(3, len);
-    EXPECT_EQ("", std::string(parameters->name));
-    EXPECT_EQ("", std::string(parameters->value));
-    EXPECT_EQ("", std::string((parameters+psize)->name));
-    EXPECT_EQ("", std::string((parameters+psize)->value));
-    EXPECT_EQ("", std::string((parameters+2*psize)->name));
-    EXPECT_EQ("", std::string((parameters+2*psize)->value));
+    EXPECT_EQ("", std::string(parameters[0].name));
+    EXPECT_EQ("", std::string(parameters[0].value));
+    EXPECT_EQ("", std::string(parameters[1].name));
+    EXPECT_EQ("", std::string(parameters[1].value));
+    EXPECT_EQ("", std::string(parameters[1].name));
+    EXPECT_EQ("", std::string(parameters[1].value));
+
+    free(parameters);
 }
