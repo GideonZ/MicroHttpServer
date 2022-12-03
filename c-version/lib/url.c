@@ -8,10 +8,10 @@
 
 // Helper macro for url parsing
 #define SPLIT(right, delm) {\
-	char *token = url_start; \
 	strsep(&token, delm);\
 	if (token == NULL) right = empty;\
 	else right = token; \
+	token = url_start; \
 }
 
 const char *supported_apiversions[] = {
@@ -24,6 +24,7 @@ struct Parameter *parse_querystring(char *querystring_copy, size_t *parameters_l
 	struct Parameter *parameters;
 
 	char *token, *name, *value;
+	static const char *empty = "";
 
 	*parameters_len = 0;
 	if (strlen(querystring_copy) == 0) {
@@ -40,12 +41,12 @@ struct Parameter *parse_querystring(char *querystring_copy, size_t *parameters_l
 	int index = 0;
 	while ((value = token = strsep(&querystring_copy, "&")) != NULL) {
 		name = strsep(&value, "=");
-		if (value == NULL) {
-			name = token;
-			value = token+strlen(token); // Empty string
-		}
 		parameters[index].name = name;
-		parameters[index].value = value;
+		if (value == NULL) {
+			parameters[index].value = empty;
+		} else {
+			parameters[index].value = value;
+		}
 		index++;
 	}
 
@@ -72,9 +73,9 @@ struct UrlComponents *new_url_components(
 	c->command = command;
 	c->querystring = querystring;
 	c->url_copy = url_copy;
-	//	c->querystring_copy = strndup(querystring, strlen(querystring));
+	c->querystring_copy = strdup(querystring);
 
-	c->parameters = parse_querystring(url_copy, &(c->parameters_len));
+	c->parameters = parse_querystring(c->querystring_copy, &(c->parameters_len));
 
 	return c;
 }
@@ -84,6 +85,8 @@ void delete_url_components(struct UrlComponents *components) {
 	components->parameters = NULL;
 	free(components->url_copy);
 	components->url_copy = NULL;
+	free(components->querystring_copy);
+	components->querystring_copy = NULL;
 	free(components);
 	components = NULL; // only sets components to NULL on the stack, and then leaves, abandoning the stack
 }

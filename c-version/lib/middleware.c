@@ -90,7 +90,7 @@ void Api(HTTPReqMessage *req, HTTPRespMessage *res) {
     p += n;
 
     for (int j = 0; j < c->parameters_len; j++) {
-        sprintf(comp, "<li>%s: <tt>%s</tt></li>", (c->parameters+(sizeof(struct Parameter)*j))->name, (c->parameters+(sizeof(struct Parameter)*j))->value);
+        sprintf(comp, "<li>%s: <tt>%s</tt></li>", c->parameters[j].name, c->parameters[j].value);
         n = strlen(comp);
         memcpy(p, comp, n);
         i += n;

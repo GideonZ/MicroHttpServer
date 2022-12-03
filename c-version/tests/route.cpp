@@ -212,8 +212,23 @@ TEST_F(RouteTest, ParseQS_OnlyAmp) {
     EXPECT_EQ("", std::string(parameters[0].value));
     EXPECT_EQ("", std::string(parameters[1].name));
     EXPECT_EQ("", std::string(parameters[1].value));
-    EXPECT_EQ("", std::string(parameters[1].name));
-    EXPECT_EQ("", std::string(parameters[1].value));
+    EXPECT_EQ("", std::string(parameters[2].name));
+    EXPECT_EQ("", std::string(parameters[2].value));
+
+    free(parameters);
+}
+
+TEST_F(RouteTest, ParseQS_Groetjes) {
+    char q[] = "param=1&tweede=2&groetjes=holland";
+    parameters = parse_querystring(q, &len);
+
+    EXPECT_EQ(3, len);
+    EXPECT_EQ("param", std::string(parameters[0].name));
+    EXPECT_EQ("1", std::string(parameters[0].value));
+    EXPECT_EQ("tweede", std::string(parameters[1].name));
+    EXPECT_EQ("2", std::string(parameters[1].value));
+    EXPECT_EQ("groetjes", std::string(parameters[2].name));
+    EXPECT_EQ("holland", std::string(parameters[2].value));
 
     free(parameters);
 }
