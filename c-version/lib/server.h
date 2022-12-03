@@ -8,9 +8,15 @@
 
 #define MAX_HEADER_SIZE 2048
 #define MAX_BODY_SIZE 2048
+
 #ifndef MHS_PORT
-#define MHS_PORT 8001
+#define MHS_PORT 80
+#define close lwip_close
+#include <lwip/inet.h>
+#else
+#include <arpa/inet.h>
 #endif
+
 #ifndef MAX_HTTP_CLIENT
 #define MAX_HTTP_CLIENT 4
 #endif
@@ -87,6 +93,8 @@ void HTTPServerRun(HTTPServer *, HTTPREQ_CALLBACK);
         }                                                                                                              \
     }
 void HTTPServerClose(HTTPServer *);
+
+#define DEBUG_MSG 1
 
 #ifdef DEBUG_MSG
 #include <stdio.h>

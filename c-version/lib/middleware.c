@@ -116,7 +116,7 @@ static const char *get_mime_type(const char *filename)
     return default_mime_type;
 }
 
-#if ENABLE_STATIC_FILE != 2
+#if ENABLE_STATIC_FILE 
 /* Try to read static files under static folder. */
 uint8_t _ReadStaticFiles(HTTPReqMessage *req, HTTPRespMessage *res)
 {
@@ -242,7 +242,7 @@ void Dispatch(HTTPReqMessage *req, HTTPRespMessage *res)
         }
     }
 
-#if ENABLE_STATIC_FILE == 1
+#if ENABLE_STATIC_FILE
     /* Check static files. */
     if (found != 1)
         found = _ReadStaticFiles(req, res);
