@@ -350,6 +350,9 @@ void _HTTPServerRequest(HTTPReq *hr, HTTPREQ_CALLBACK callback)
             if (req->BodyDataAvail) {
                 if (req->BodyCB) {
                     req->BodyCB(req->BodyContext, req->Body, req->BodyDataAvail);
+                    if (req->BodyDataAvail == req->BodySize) {
+                        req->BodyCB(req->BodyContext, NULL, 0); // Terminate
+                    }
                 }
             }
         } else {

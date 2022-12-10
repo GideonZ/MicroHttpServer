@@ -275,6 +275,10 @@ static int filestream_in(void *context, uint8_t *buf, int len)
         case eBinary:
             if (len == 0) {
                 if (stream->block_cb) {
+                    BodyDataBlock_t block = { eDataEnd, NULL, 0, stream->block_context };
+                    stream->block_cb(&block);
+                }
+                if (stream->block_cb) {
                     BodyDataBlock_t block = { eTerminate, NULL, 0, stream->block_context };
                     stream->block_cb(&block);
                 }
@@ -368,6 +372,10 @@ static int filestream_in(void *context, uint8_t *buf, int len)
                 stream->state = eTerminated;
                 if (stream->data_size) {
                     expunge(stream);
+                    if (stream->block_cb) {
+                        BodyDataBlock_t block = { eDataEnd, NULL, 0, stream->block_context };
+                        stream->block_cb(&block);
+                    }
                 }
                 if (stream->block_cb) {
                     BodyDataBlock_t block = { eTerminate, NULL, 0, stream->block_context };
@@ -400,6 +408,8 @@ void ApiBody(BodyDataBlock_t *block)
     switch(block->type) {
         case eStart:
             sprintf(temp, "<h3>Attachments</h3><ul>\n");
+            strcpy(body->filename, "Unnamed");
+            body->filesize = 0;
             break;
         case eSubHeader:
             body->filesize = 0;
@@ -423,10 +433,10 @@ void ApiBody(BodyDataBlock_t *block)
             body->filesize += block->length;
             break;
         case eDataEnd:
-            sprintf(temp, "<li>'%s' <tt>Size: %d</tt>\n", body->filename, body->filesize);
+            sprintf(temp, "<li>'%s' <tt>Size: %d</tt></li>\n", body->filename, body->filesize);
             break;
         case eTerminate:
-            sprintf(temp, "</ul>\n");
+            sprintf(temp, "</ul>\n</body></html>\n");
             break;
     }
     int n = strlen(temp);
@@ -441,7 +451,8 @@ void Api(UrlComponents *c, HTTPReqMessage *req, HTTPRespMessage *res)
     int n, i = 0;
     char *p;
     char header[] = "HTTP/1.1 200 OK\r\nConnection: close\r\n"
-                    "Content-Type: text/html; charset=UTF-8\r\n\r\n";
+                    "Content-Type: text/html; charset=UTF-8\r\n\r\n"
+                    "<!DOCTYPE html><html><body>\n";
 
     /* Build header. */
     p = (char *)res->_buf;
@@ -457,7 +468,7 @@ void Api(UrlComponents *c, HTTPReqMessage *req, HTTPRespMessage *res)
                     "<li>route: %s</li>"
                     "<li>path: %s</li>"
                     "<li>command: %s</li>"
-                    "<li>querystring: %s</li>"
+                    "<li>querystring: \"%s\"</li>"
                     "<li>length: %d</li></ul>"
                     "<h3>Parameters</h3><ul>",
     c_method_strings[c->method], c->route, c->path, c->command, c->querystring, (int)c->parameters_len);
@@ -479,6 +490,13 @@ void Api(UrlComponents *c, HTTPReqMessage *req, HTTPRespMessage *res)
     i += n;
     p += n;
 
+    if(req->BodySize) {
+        sprintf(comp, "<h2>Body Length: %ld</h2>", req->BodySize);
+        n = strlen(comp);
+        memcpy(p, comp, n);
+        i += n;
+        p += n;
+    }
     res->_index = i;
 
     if (req->BodySize) {
@@ -493,7 +511,15 @@ void Api(UrlComponents *c, HTTPReqMessage *req, HTTPRespMessage *res)
         stream->block_cb = &ApiBody;
         stream->block_context = body; 
         filestream_in(stream, NULL, 0); // Initialize
+    } else {
+        // close early
+        const char *tail = "</body></html>\n";
+        n = strlen(tail);
+        memcpy(p, tail, n);
+        i += n;
+        p += n;
     }
+    res->_index = i;
 }
 
 static const char *get_mime_type(const char *filename)
