@@ -106,6 +106,7 @@ typedef struct _FileStream
     int field_count;
     HTTPHeaderField fields[8];
     BODY_DATABLOCK_CB block_cb;
+    void *block_context;
 } FileStream_t;
 
 // Finding the separators in a stream is not that easy when the data comes in in packets, as the separators can be
@@ -127,18 +128,17 @@ typedef struct _FileStream
 // Another approach is pattern searching on the fly. In this approach, the separator search state machine is extended
 // to also handle the header as well. Separate buffers are created to store the three different types of data that
 // the multipart stream header contains:
-// - Separator Bytes
 // - Header Bytes
 // - Data Bytes
-// Storing separator bytes is necessary because these bytes will turn out to be data bytes as soon as it turns out
-// that not the entire separator matches. Then these bytes need to be added to the data bytes.
+// Storing separator bytes is not necessary because they are constant. Still, these bytes will turn out to be data bytes
+// as soon as it turns out that not the entire separator matches. Then these bytes need to be added to the data bytes.
 // The data bytes buffer not strictly needed, but might facilitate writing the data to a device that requires alignment.
 // Storing the header bytes facilitates in parsing the header, because this guarantees that all the data is
 // sequential, and doesn't wrap around the boundaries of a circular buffer, as is the case with a FIFO.
 // The state machine should have the following states:
 // [ wait_separator, separator, header, data ]. In the first state, all non-matching data is thrown away.
 
-void _ParseMultiPartHeader(FileStream_t *stream)
+static void _ParseMultiPartHeader(FileStream_t *stream)
 {
     char *p = (char *)stream->header + 2;
     char *lines[8];
@@ -183,7 +183,7 @@ void _ParseMultiPartHeader(FileStream_t *stream)
     stream->field_count = count;
 
     if (stream->block_cb) {
-        BodyDataBlock_t block = { eSubHeader, (const char *)stream->fields, count };
+        BodyDataBlock_t block = { eSubHeader, (const char *)stream->fields, count, stream->block_context };
         stream->block_cb(&block);
     }
 }
@@ -227,10 +227,11 @@ void attachment_block_debug(BodyDataBlock_t *block)
             break;
     }
 }
+
 static void expunge(FileStream_t *stream)
 {
     if (stream->block_cb) {
-        BodyDataBlock_t block = (BodyDataBlock_t){ eDataBlock, stream->data, stream->data_size, NULL };
+        BodyDataBlock_t block = (BodyDataBlock_t){ eDataBlock, stream->data, stream->data_size, stream->block_context };
         stream->block_cb(&block);
     }
     stream->data_size = 0;
@@ -246,7 +247,7 @@ static int filestream_in(void *context, uint8_t *buf, int len)
         case eInit: // the first time that this function is called is to set it up
         // after the request header has been parsed. It is called without data.
             if (stream->block_cb) {
-                BodyDataBlock_t block = { eStart, stream->type, strlen(stream->type), NULL };
+                BodyDataBlock_t block = { eStart, stream->type, strlen(stream->type), stream->block_context };
                 stream->block_cb(&block);
             }
             if (!strncasecmp(stream->type, "multipart", 9)) { // 9 chars
@@ -274,14 +275,14 @@ static int filestream_in(void *context, uint8_t *buf, int len)
         case eBinary:
             if (len == 0) {
                 if (stream->block_cb) {
-                    BodyDataBlock_t block = { eTerminate, NULL, 0, NULL };
+                    BodyDataBlock_t block = { eTerminate, NULL, 0, stream->block_context };
                     stream->block_cb(&block);
                 }
                 // Since we are the owner of this struct, we can free it
                 free(stream);
             } else {
                 if (stream->block_cb) {
-                    BodyDataBlock_t block = { eDataBlock, (const char *)buf, len, NULL };
+                    BodyDataBlock_t block = { eDataBlock, (const char *)buf, len, stream->block_context };
                     stream->block_cb(&block);
                 }
             }
@@ -300,7 +301,7 @@ static int filestream_in(void *context, uint8_t *buf, int len)
                             expunge(stream);
                         }
                         if ((stream->block_cb) && (stream->state == eData)) {
-                            BodyDataBlock_t block = { eDataEnd, NULL, 0, NULL };
+                            BodyDataBlock_t block = { eDataEnd, NULL, 0, stream->block_context };
                             stream->block_cb(&block);
                         }
                         // After a separator there is always a header.
@@ -369,7 +370,7 @@ static int filestream_in(void *context, uint8_t *buf, int len)
                     expunge(stream);
                 }
                 if (stream->block_cb) {
-                    BodyDataBlock_t block = { eTerminate, NULL, 0, NULL };
+                    BodyDataBlock_t block = { eTerminate, NULL, 0, stream->block_context };
                     stream->block_cb(&block);
                 }
                 free(stream);
@@ -384,9 +385,54 @@ static int filestream_in(void *context, uint8_t *buf, int len)
 }
 
 /* Example implementation of API */
-void ApiBody(BodyDataBlock_t *blk, HTTPRespMessage *res)
+typedef struct {
+    HTTPRespMessage *msg;
+    char filename[128];
+    int filesize;
+} ApiBody_t;
+
+void ApiBody(BodyDataBlock_t *block)
 {
-//    char attach[1024];
+    ApiBody_t *body = (ApiBody_t *)block->context;
+    HTTPRespMessage *resp = body->msg;
+    char temp[256];
+    temp[0] = 0;
+    switch(block->type) {
+        case eStart:
+            sprintf(temp, "<h3>Attachments</h3><ul>\n");
+            break;
+        case eSubHeader:
+            body->filesize = 0;
+            HTTPHeaderField *f = (HTTPHeaderField *)block->data;
+            for(int i=0; i < block->length; i++) {
+                if (strcasecmp(f[i].key, "Content-Disposition") == 0) {
+                    // extract filename from value string, e.g. 'form-data; name="bestand"; filename="sample.html"'
+                    char *sub = strstr(f[i].value, "filename=\"");
+                    if (sub) {
+                        strncpy(body->filename, sub + 10, 127);
+                        body->filename[127] = 0;
+                        char *quote = strstr(body->filename, "\"");
+                        if (quote) {
+                            *quote = 0;
+                        }
+                    }
+                }
+            }
+            break;
+        case eDataBlock:
+            body->filesize += block->length;
+            break;
+        case eDataEnd:
+            sprintf(temp, "<li>'%s' <tt>Size: %d</tt>\n", body->filename, body->filesize);
+            break;
+        case eTerminate:
+            sprintf(temp, "</ul>\n");
+            break;
+    }
+    int n = strlen(temp);
+    char *p = (char *)resp->_buf + resp->_index;
+    memcpy(p, temp, n);
+    resp->_index += n;
 }
 
 
@@ -435,17 +481,19 @@ void Api(UrlComponents *c, HTTPReqMessage *req, HTTPRespMessage *res)
 
     res->_index = i;
 
-/*
     if (req->BodySize) {
-        req->BodyCB = &filestream_in;
+        ApiBody_t *body = malloc(sizeof(ApiBody_t));
+        body->msg = res; // This function can write directly into the response data buffer (!)
+
         FileStream_t * stream = malloc(sizeof(FileStream_t));
         memset(stream, 0, sizeof(FileStream_t)); // also sets the state to eInit
+        req->BodyCB = &filestream_in;
         req->BodyContext = stream;
         stream->type = req->ContentType;
         stream->block_cb = &ApiBody;
+        stream->block_context = body; 
         filestream_in(stream, NULL, 0); // Initialize
     }
-*/
 }
 
 static const char *get_mime_type(const char *filename)
@@ -552,18 +600,6 @@ void Dispatch(HTTPReqMessage *req, HTTPRespMessage *res)
     // By default, there is no callback installed for the body data
     // such that it gets ditched properly.
 
-/* For now we catch the data always with the attachment parser */
-    if (req->BodySize) {
-        req->BodyCB = &filestream_in;
-        FileStream_t * stream = malloc(sizeof(FileStream_t));
-        memset(stream, 0, sizeof(FileStream_t)); // also sets the state to eInit
-        req->BodyContext = stream;
-        stream->type = req->ContentType;
-        stream->block_cb = &attachment_block_debug;
-        filestream_in(stream, NULL, 0); // Initialize
-    }
-
-
     if (found != 1) {
 #if ENABLE_STATIC_FILE == 2 // Running on Ultimate
         if (execute_api_v1(req, res) == 0) {
@@ -580,8 +616,20 @@ void Dispatch(HTTPReqMessage *req, HTTPRespMessage *res)
 
 #if ENABLE_STATIC_FILE
     /* Check static files. */
-    if (found != 1)
+    if (found != 1) {
+
+        if (req->BodySize) {
+            req->BodyCB = &filestream_in;
+            FileStream_t * stream = malloc(sizeof(FileStream_t));
+            memset(stream, 0, sizeof(FileStream_t)); // also sets the state to eInit
+            req->BodyContext = stream;
+            stream->type = req->ContentType;
+            stream->block_cb = &attachment_block_debug;
+            filestream_in(stream, NULL, 0); // Initialize
+        }
+
         found = _ReadStaticFiles(req, res);
+    }
 #endif
 
     /* It is really not found. */
