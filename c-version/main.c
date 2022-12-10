@@ -1,7 +1,6 @@
 #include "server.h"
 #include "middleware.h"
 #include "url.h"
-#include "app.h"
 
 /* The HTTP server of this process. */
 HTTPServer srv;
@@ -17,10 +16,6 @@ void SigRoutine_INT(int unused) {
 #endif
 
 int main(void) {
-	/* Register the routes. */
-	AddRoute(HTTP_GET, "/index.html", HelloPage);
-	AddRoute(HTTP_GET, "/", HelloPage);
-	AddRoute(HTTP_POST, "/fib", Fib);
 	/* Initial the HTTP server and make it listening on MHS_PORT. */
 	HTTPServerInit(&srv, MHS_PORT);
 	/* Run the HTTP server forever. */

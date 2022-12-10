@@ -8,10 +8,6 @@
 #define LWIP 1
 #endif
 
-/* Route */
-#ifndef MAX_HTTP_ROUTES
-#define MAX_HTTP_ROUTES 10
-#endif
 #if (ENABLE_STATIC_FILE == 1) && !(defined STATIC_FILE_FOLDER)
 #define STATIC_FILE_FOLDER "static"
 #elif (ENABLE_STATIC_FILE == 2) && !(defined STATIC_FILE_FOLDER)
@@ -19,9 +15,23 @@
 #endif
 
 /* Data type of server application function */
-typedef HTTPREQ_CALLBACK SAF;
-
-int AddRoute(HTTPMethod, const char *, SAF);
 void Dispatch(HTTPReqMessage *, HTTPRespMessage *);
+
+typedef enum {
+    eStart = 0,
+    eSubHeader,
+    eDataBlock,
+    eDataEnd,
+    eTerminate,
+} BlockType_t;
+
+typedef struct {
+    BlockType_t type;
+    const char *data;
+    int   length;
+    void *context;
+} BodyDataBlock_t;
+
+typedef void (*BODY_DATABLOCK_CB)(BodyDataBlock_t *);
 
 #endif

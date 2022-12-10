@@ -6,12 +6,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define MAX_HEADER_SIZE 2048
-#define MAX_BODY_SIZE 2048
+#define HTTP_BUFFER_SIZE (4096)
 
 #ifndef MHS_PORT
 #define MHS_PORT 80
 #define close lwip_close
+#define 
 #define LWIP 1
 #else
 #define LWIP 0
@@ -25,6 +25,12 @@
 #endif
 
 typedef int SOCKET;
+
+// this function is called whenever there is body data to be processed.
+// When the function is NULL in the request class, the data will be ditched for the request.
+// When this function returns 0 for the response, the stream will terminate.
+// The context field can be used to identify which stream this call belongs to.
+typedef int (*HTTPBODY_CALLBACK)(void *context, uint8_t *data, int size);
 
 typedef struct _HTTPServer
 {
@@ -53,15 +59,19 @@ typedef struct _HTTPReqHeader
     const char *URI;
     const char *Version;
     HTTPHeaderField Fields[MAX_HEADER_FIELDS];
-    unsigned int Amount;
+    unsigned int FieldCount;
 } HTTPReqHeader;
 
 typedef struct _HTTPReqMessage
 {
     HTTPReqHeader Header;
-    size_t _index;
     uint8_t *Body;
-    uint8_t *_buf;
+    const char *ContentType;
+    size_t   BodySize;
+    size_t   BodyDataAvail;
+    HTTPBODY_CALLBACK BodyCB;
+    void    *BodyContext;
+    uint8_t  _buf[HTTP_BUFFER_SIZE+4];
 } HTTPReqMessage;
 
 typedef struct _HTTPRespHeader
@@ -70,16 +80,17 @@ typedef struct _HTTPRespHeader
     char *StatusCode;
     char *Description;
     HTTPHeaderField Fields[MAX_HEADER_FIELDS];
-    unsigned int Amount;
+    unsigned int FieldCount;
 } HTTPRespHeader;
 
 typedef struct _HTTPRespMessage
 {
     HTTPRespHeader Header;
-    FILE *fp;
+    HTTPBODY_CALLBACK BodyCB;
+    void *BodyContext;
     size_t _index;
     uint8_t *Body;
-    uint8_t *_buf;
+    uint8_t _buf[HTTP_BUFFER_SIZE+4];
 } HTTPRespMessage;
 
 typedef void (*HTTPREQ_CALLBACK)(HTTPReqMessage *, HTTPRespMessage *);
@@ -94,7 +105,7 @@ void HTTPServerRun(HTTPServer *, HTTPREQ_CALLBACK);
     }
 void HTTPServerClose(HTTPServer *);
 
-#define DEBUG_MSG 1
+//#define DEBUG_MSG 1
 
 #ifdef DEBUG_MSG
 #include <stdio.h>

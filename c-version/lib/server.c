@@ -12,12 +12,13 @@
 typedef void (*SOCKET_CALLBACK)(void *);
 
 #define NOTWORK_SOCKET 0
-#define READING_SOCKET 1
-#define READEND_SOCKET 2
-#define WRITING_SOCKET 4
-#define WRITEEND_SOCKET 8
+#define READING_SOCKET_HDR  1
+#define READING_SOCKET_BODY 2
+#define READEND_SOCKET 4
+#define WRITING_SOCKET 8
+#define WRITEEND_SOCKET 16
 #define CLOSE_SOCKET 128
-#define IsReqReading(s) (s == READING_SOCKET)
+//#define IsReqReading(s) (s == READING_SOCKET)
 #define IsReqWriting(s) (s == WRITING_SOCKET)
 #define IsReqReadEnd(s) (s == READEND_SOCKET)
 #define IsReqWriteEnd(s) (s == WRITEEND_SOCKET)
@@ -28,21 +29,17 @@ typedef struct _HTTPReq
     SOCKET clisock;
     HTTPReqMessage req;
     HTTPRespMessage res;
-    SOCKET_CALLBACK OnRead;
-    SOCKET_CALLBACK EndRead;
-    SOCKET_CALLBACK OnWrite;
-    SOCKET_CALLBACK EndWrite;
-    size_t rindex;
     size_t windex;
     uint8_t work_state;
 } HTTPReq;
 
 HTTPReq http_req[MAX_HTTP_CLIENT];
-uint8_t req_buf[MAX_HTTP_CLIENT][MAX_HEADER_SIZE + MAX_BODY_SIZE];
-uint8_t res_buf[MAX_HTTP_CLIENT][MAX_HEADER_SIZE + MAX_BODY_SIZE];
 
 void HTTPServerInit(HTTPServer *srv, uint16_t port)
 {
+    // Just in case it was not initialized properly in BSS
+    memset(srv, 0, sizeof(HTTPServer));
+
     struct sockaddr_in srv_addr;
     unsigned int i;
 
@@ -77,8 +74,6 @@ void HTTPServerInit(HTTPServer *srv, uint16_t port)
 
     /* Prepare the HTTP client requests pool. */
     for (i = 0; i < MAX_HTTP_CLIENT; i++) {
-        http_req[i].req._buf = req_buf[i];
-        http_req[i].res._buf = res_buf[i];
         http_req[i].clisock = -1;
         http_req[i].work_state = NOTWORK_SOCKET;
     }
@@ -107,10 +102,10 @@ void _HTTPServerAccept(HTTPServer *srv)
                 DebugMsg("Accept client %d.  %s:%d\n", i, inet_ntoa(cli_addr.sin_addr), (int)ntohs(cli_addr.sin_port));
                 srv->available_connections -= 1;
                 http_req[i].clisock = clisock;
-                http_req[i].req.Header.Amount = 0;
-                http_req[i].res.Header.Amount = 0;
-                http_req[i].rindex = 0;
+                http_req[i].req.Header.FieldCount = 0;
+                http_req[i].res.Header.FieldCount = 0;
                 http_req[i].windex = 0;
+                http_req[i].work_state = READING_SOCKET_HDR;
                 break;
             }
         }
@@ -164,12 +159,11 @@ void WriteSock(HTTPReq *hr)
 {
     ssize_t n;
 
-    if ((hr->windex >= hr->res._index) && (hr->res.fp)) {
+    if ((hr->windex >= hr->res._index) && (hr->res.BodyCB)) {
         hr->windex = 0;
-        hr->res._index = fread(hr->res._buf, 1, MAX_BODY_SIZE, hr->res.fp);
+        hr->res._index = hr->res.BodyCB(hr->res.BodyContext, hr->res._buf, HTTP_BUFFER_SIZE);
         if (hr->res._index == 0) {
-            fclose(hr->res.fp);
-            hr->res.fp = NULL;
+            hr->res.BodyCB = NULL;
         }
     }
 
@@ -177,7 +171,7 @@ void WriteSock(HTTPReq *hr)
     if (n > 0) {
         /* Send some bytes and send left next loop. */
         hr->windex += n;
-        if ((hr->res._index > hr->windex) || (hr->res.fp))
+        if ((hr->res._index > hr->windex) || (hr->res.BodyCB))
             hr->work_state = WRITING_SOCKET;
         else
             hr->work_state = WRITEEND_SOCKET;
@@ -194,157 +188,185 @@ void WriteSock(HTTPReq *hr)
     }
 }
 
-int _ParseHeader(HTTPReq *hr)
-{
-    SOCKET clisock = hr->clisock;
-    HTTPReqMessage *req = &(hr->req);
-    int n;
-    int l, end;
-    int i = 0;
-    char *p;
-
-    DebugMsg("\tParse Header\n");
-    p = (char *)req->_buf;
-    /* GET, PUT ... and a white space are 3 charaters. */
-    n = recv(clisock, p, 3, 0);
-    if (n == 3) {
-        /* Parse method. */
-        for (i = 3; n > 0; i++) {
-            n = recv(clisock, p + i, 1, 0);
-            if (p[i] == ' ') {
-                p[i] = '\0';
-                break;
-            }
-        }
-        req->Header.Method = HaveMethod(p);
-
-        /* Parse URI. */
-        if (n > 0)
-            i += 1;
-        req->Header.URI = p + i;
-        for (; n > 0; i++) {
-            n = recv(clisock, p + i, 1, 0);
-            if (p[i] == ' ') {
-                p[i] = '\0';
-                break;
-            }
-        }
-
-        /* Parse HTTP version. */
-        if (n > 0)
-            i += 1;
-        req->Header.Version = p + i;
-        /* HTTP/1.1 has 8 charaters. */
-        n = recv(clisock, p + i, 8, 0);
-        for (i += 8; (n > 0) && (i < MAX_HEADER_SIZE); i++) {
-            n = recv(clisock, p + i, 1, 0);
-            if ((l = _CheckLine(p + i))) {
-                if (l == 2)
-                    p[i - 1] = '\0';
-                p[i] = '\0';
-                break;
-            }
-        }
-
-        /* Parse other fields. */
-        if (n > 0)
-            i += 1;
-        req->Header.Fields[req->Header.Amount].key = p + i;
-        end = 0;
-        for (; (n > 0) && (i < MAX_HEADER_SIZE) && (req->Header.Amount < MAX_HEADER_FIELDS); i++) {
-            n = recv(clisock, p + i, 1, 0);
-            /* Check field key name end. */
-            if ((l = _CheckFieldSep(p + i))) {
-                p[i - 1] = '\0';
-                req->Header.Fields[req->Header.Amount].value = p + i + 1;
-            }
-
-            /* Check header end. */
-            if ((l = _CheckLine(p + i))) {
-                if (end == 0) {
-                    if (l == 2)
-                        p[i - 1] = '\0';
-                    p[i] = '\0';
-
-                    /* CRLF have 2 characters, so check 2 times new line. */
-                    end = 2;
-
-                    /* Go to parse next header field. */
-                    req->Header.Amount += 1;
-                    req->Header.Fields[req->Header.Amount].key = p + i + 1;
-                } else {
-                    /* Requset message header finished. */
-                    break;
-                }
-            } else {
-                if (end > 0)
-                    end -= 1;
-            }
-        }
-    }
-    if (n < 0) {
-        hr->work_state = CLOSE_SOCKET;
-    }
-
-    req->_index = (n > 0) ? i + 1 : i;
-    return i;
-}
-
 int _IsLengthHeader(const char *key)
 {
-    const char *len_header = "content-length";
+    return !strcasecmp(key, "content-length");
+}
 
-    return !strncasecmp(key, len_header, strlen(len_header));
+int _IsTypeField(const char *key)
+{
+    return !strcasecmp(key, "content-type");
+}
+
+void _ParseHeader(HTTPReqMessage *req, int bytes_received)
+{
+    char *p = (char *)req->_buf;
+    char *lines[32];
+    int line = 0;
+
+    // First split the header buffer into lines by searching for the \r\n sequences
+    // The method used here is to separate on \r and skip the following \n.
+    for(line = 0; line < 32; line++) {
+        lines[line] = strsep(&p, "\r");
+        if (!p) {
+            break;
+        }
+        p++; // skip the \n
+        if (! *(lines[line])) {
+            break;
+        }
+    }
+    // p is now pointing to the byte after the header, if any. This might be part of the body.
+    req->Body = (uint8_t *)p;
+    req->BodyDataAvail = (size_t)bytes_received - ((size_t)p - (size_t)(req->_buf));
+
+    // Step 2: Get the verb, path and HTTP identifier from the first line
+    // Split by space
+    // VERB path HTTP/1.1
+    char *cur = lines[0];
+    char *verb = strsep(&cur, " ");
+    req->Header.Method = HaveMethod(verb);
+    if (cur) {
+        req->Header.URI = strsep(&cur, " ");
+        req->Header.Version = cur; // can also be NULL
+    } else {
+        req->Header.URI = NULL;
+        req->Header.Version = NULL;
+    }
+
+    // Step 3: Split the remaining lines into fields.
+    // All subsequent lines are in the form of KEY ": " VALUE, although the space is not mandatory by spec.
+    // so leading spaces need to be trimmed, and the separator is simply ':'
+    req->Header.FieldCount = 0;
+    for(line = 1; line < 32; line++) {
+        if (! *(lines[line])) {
+            break;
+        }
+        p = lines[line];
+        req->Header.Fields[req->Header.FieldCount].key = strsep(&p, ":");
+        if (p) {
+            while(*p == ' ') {
+                p++;
+            }
+            req->Header.Fields[req->Header.FieldCount].value = p;
+            // printf("'%s' -> '%s'\n", req->Header.Fields[req->Header.FieldCount].key, req->Header.Fields[req->Header.FieldCount].value);
+            req->Header.FieldCount++;
+        } else {
+            break;
+        }
+    }
+
+    // Step 4: Determine how much body data is required for this request
+    req->BodySize = 0;
+    req->ContentType = NULL;
+    if (req->Header.Method == HTTP_POST) {
+        for (int i = 0; i < req->Header.FieldCount; i++) {
+            if (_IsLengthHeader(req->Header.Fields[i].key)) {
+                req->BodySize = strtol(req->Header.Fields[i].value, NULL, 0);
+                break;
+            }
+        }
+        for (int i = 0; i < req->Header.FieldCount; i++) {
+            if (_IsTypeField(req->Header.Fields[i].key)) {
+                req->ContentType = req->Header.Fields[i].value;
+                break;
+            }
+        }
+    }
+    req->BodyCB = NULL; // to be filled in by the application
+    req->BodyContext = NULL; // to be filled in by the application
 }
 
 int _GetBody(HTTPReq *hr)
 {
     SOCKET clisock = hr->clisock;
     HTTPReqMessage *req = &(hr->req);
-    int n = 1;
-    unsigned int i = 0;
-    int c = 0, len = 0;
-    uint8_t *p;
 
-    DebugMsg("\tParse body\n");
-    req->Body = req->_buf + req->_index;
+    const size_t c_max = HTTP_BUFFER_SIZE;
+    req->BodySize -= req->BodyDataAvail;
+    size_t remain = (req->BodySize > c_max) ? c_max : req->BodySize;
 
-    if (req->Header.Method == HTTP_POST) {
-        for (i = 0; i < req->Header.Amount; i++) {
-            if (_IsLengthHeader(req->Header.Fields[i].key)) {
-                len = atoi(req->Header.Fields[i].value);
-                break;
-            }
+    char *p = (char *)req->_buf;
+    int n = recv(clisock, p, remain, 0);
+    if (n > 0) {
+        req->BodyDataAvail = n;
+    } else {
+        req->BodyDataAvail = 0;
+    }
+    DebugMsg("\tGet more Body Data: %lu %lu\n", req->BodySize, req->BodyDataAvail);
+    if (req->BodyCB) {
+        req->BodyCB(req->BodyContext, req->_buf, req->BodyDataAvail);
+        if (req->BodyDataAvail >= req->BodySize) {
+            req->BodyCB(req->BodyContext, NULL, 0);
+            req->BodyCB = NULL; // done!
+            n = 0;
         }
-        p = req->Body;
-        if (len > MAX_BODY_SIZE)
-            len = MAX_BODY_SIZE;
-        for (c = 0; (n > 0) && (c < len); c += n) {
-            n = recv(clisock, p + c, (len - c), MSG_PEEK);
+    } else {
+        DebugMsg("\tData ditched, no callback.\n");
+        if (req->BodyDataAvail >= req->BodySize) {
+            n = 0;
         }
     }
+    return n;
+}
 
-    req->Body[c] = '\0';
+int _GetHeader(HTTPReq *hr)
+{
+    SOCKET clisock = hr->clisock;
+    HTTPReqMessage *req = &(hr->req);
+    int n;
+    char *p;
 
-    return (n < 0) ? -1 : c;
+    DebugMsg("\tParse Header\n");
+    p = (char *)req->_buf;
+    n = recv(clisock, p, HTTP_BUFFER_SIZE, 0);
+
+    if (n > 0) {
+        p[n] = '\0'; // make it a null terminated string, so we know until where data was read later on, without
+                     // checking n in every string operation. This is allowed, because we allocated HTTP_BUFFER_SIZE+4
+
+        _ParseHeader(req, n); // Do we actually NEED to parse everything??
+    }
+    return n;
 }
 
 void _HTTPServerRequest(HTTPReq *hr, HTTPREQ_CALLBACK callback)
 {
     int n;
+    HTTPReqMessage *req = &(hr->req);
 
-    hr->work_state = READING_SOCKET;
-    n = _ParseHeader(hr);
-    if (n > 0) {
-        n = _GetBody(hr);
-        if (n >= 0) {
+    if (hr->work_state == READING_SOCKET_HDR) {
+        n = _GetHeader(hr);
+        if (n > 0) {
+            if (req->BodyDataAvail < req->BodySize) {
+                hr->work_state = READING_SOCKET_BODY;
+            } else {
+                /* Write all response. */
+                hr->work_state = WRITING_SOCKET;
+            }
             callback(&(hr->req), &(hr->res));
+            // TODO: The data tail could be body, but could also be a new request.
+            // This should be handled differently. In practice, BodyDataAvail is always 0 at this point
+            if (req->BodyDataAvail) {
+                if (req->BodyCB) {
+                    req->BodyCB(req->BodyContext, req->Body, req->BodyDataAvail);
+                }
+            }
+        } else {
+            hr->work_state = CLOSE_SOCKET;
+        }
+    } else if (hr->work_state == READING_SOCKET_BODY) {
+        n = _GetBody(hr);
+        if (n > 0) {
+            hr->work_state = READING_SOCKET_BODY;
+        } else if(n == 0) {
             /* Write all response. */
             hr->work_state = WRITING_SOCKET;
         } else {
             hr->work_state = CLOSE_SOCKET;
         }
     } else {
+        printf("Unexpected work state %d\n", hr->work_state);
         hr->work_state = CLOSE_SOCKET;
     }
 }
@@ -373,8 +395,10 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
             if (FD_ISSET(http_req[i].clisock, &readable)) {
                 /* Deal the request from the client socket. */
                 _HTTPServerRequest(&(http_req[i]), callback);
-                FD_SET(http_req[i].clisock, &(srv->_write_sock_pool));
-                FD_CLR(http_req[i].clisock, &(srv->_read_sock_pool));
+                if (http_req[i].work_state == WRITING_SOCKET) {
+                    FD_SET(http_req[i].clisock, &(srv->_write_sock_pool));
+                    FD_CLR(http_req[i].clisock, &(srv->_read_sock_pool));
+                }
             }
             if (IsReqWriting(http_req[i].work_state) && FD_ISSET(http_req[i].clisock, &writeable)) {
                 WriteSock(http_req + i);
@@ -457,7 +481,7 @@ void _HelloPage(HTTPReqMessage *req, HTTPRespMessage *res)
     p += n;
     i += n;
 
-    for (j = 0; j < req->Header.Amount; j++) {
+    for (j = 0; j < req->Header.FieldCount; j++) {
         n = strlen("<br>");
         memcpy(p, "<br>", n);
         p += n;

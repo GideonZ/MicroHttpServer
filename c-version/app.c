@@ -54,7 +54,7 @@ void HelloPage(HTTPReqMessage *req, HTTPRespMessage *res) {
 	p += n;
 	i += n;
 
-	for(j=0; j<req->Header.Amount; j++) {
+	for(j=0; j<req->Header.FieldCount; j++) {
 		n = strlen("<br>");
 		memcpy(p, "<br>", n);
 		p += n;

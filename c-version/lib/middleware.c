@@ -6,33 +6,54 @@
 #include "middleware.h"
 #include "url.h"
 
-/* Route */
-typedef struct _Route
+/* Debug */
+#define DUMP_BYTES 16
+void dump_hex_actual(const void *pp, int len, int relative)
 {
-    HTTPMethod method;
-    const char *uri;
-    SAF saf;
-} Route;
+    int w,t;
+    uint8_t c;
+    uint8_t *p = (uint8_t *)pp;
+    
+	for(w=0;w<len;w+=DUMP_BYTES) {
+        if(relative)
+            printf("%4x: ", w);
+        else
+		    printf("%p: ", p + w);
+        for(t=0;t<DUMP_BYTES;t++) {
+            if((w+t) < len) {
+		        printf("%02x ", *((uint8_t *)&(p[w+t])));
+		    } else {
+		        printf("   ");
+		    }
+		}
+        for(t=0;t<DUMP_BYTES;t++) {
+            if((w+t) < len) {
+                c = p[w+t] & 0x7F;
 
-Route routes[MAX_HTTP_ROUTES];
-int routes_used = 0;
-
-/* Add an URI and the corresponding server application function into the route
-   table. */
-int AddRoute(HTTPMethod method, const char *uri, SAF saf)
-{
-    if (routes_used < MAX_HTTP_ROUTES) {
-        routes[routes_used].method = method;
-        routes[routes_used].uri = uri;
-        routes[routes_used].saf = saf;
-        routes_used++;
-
-        return routes_used;
-    } else {
-        return 0;
-    }
+                if((c >= 0x20)&&(c <= 0x7F)) {
+                    printf("%c", c);
+                } else {
+                    printf(".");
+                }
+		    } else {
+		        break;
+		    }
+		}
+		printf("\n");
+	}
 }
 
+void dump_hex(const void *pp, int len)
+{
+    dump_hex_actual(pp, len, 0);
+}
+
+void dump_hex_relative(const void *pp, int len)
+{
+    dump_hex_actual(pp, len, 1);
+}
+
+/* Known Mime Types */
 typedef struct {
     const char *extension;
     const char *mime_type;
@@ -56,11 +77,321 @@ mime_map meme_types [] = {
 };
 
 const char *default_mime_type = "text/plain";
-
-// typedef enum { HTTP_UNKNOWN, HTTP_GET, HTTP_POST, HTTP_PUT, HTTP_DELETE } HTTPMethod;
 const char *c_method_strings[] = { "BAD", "GET", "POST", "PUT", "DELETE" };
 
-void Api(UrlComponents *c, HTTPRespMessage *res) {
+// ** DIRTY **
+extern int execute_api_v1(HTTPReqMessage *req, HTTPRespMessage *resp);
+
+/* Body Parsing (Attachment Extractor) */
+typedef enum {
+    eInit = 0,
+    eBinary,
+    eDitch,
+    eHeader,
+    eData,
+    eTerminated,
+} stream_state_t;
+
+typedef struct _FileStream
+{
+    stream_state_t state;
+    const char *type;
+    char *boundary;
+    int boundary_length;
+    int match_state;
+    char header[1024];
+    int header_size;
+    char data[4096];
+    int data_size;
+    int field_count;
+    HTTPHeaderField fields[8];
+    BODY_DATABLOCK_CB block_cb;
+} FileStream_t;
+
+// Finding the separators in a stream is not that easy when the data comes in in packets, as the separators can be
+// partly on packet boundaries. Secondly, it is not possible to stream out all data to the destination directly, because
+// part of the last data might belong to the boundary. One solution is found in the use of a FIFO where the data packets
+// are pushed into. This allows some of the data to be held back before forwarding it to the destination. The separator
+// detection is based on a state machine. The state of the string comparison is kept, at all times, in particular at the
+// end of a data block, such that the string comparison can continue when new data arrives. In order for this mechanism
+// to work well, there is never more data taken out from the FIFO than the number of available data bytes minus the
+// separator length. Secondly, the FIFO should always be able to take new data in. The maximum size of a data block is
+// known. The chosen FIFO size equals two data blocks. This also allows of the parsing of the multipart mime header,
+// while it is in the fifo; if the block size is larger than the expected header. On top of all this, a state machine
+// that keeps track of the order of the data elements. A multipart form is structured like this:
+// (--, SEPARATOR, \r\n, (HEADER FIELD, \r\n)+, \r\n, DATA)+), --, SEPARATOR, \r\n.
+// When the separator to search for is extended with as --SEP\r\n, and the \r\n are included in the header fields, this
+// simplifies to:
+// (SEPARATOR, (HEADER FIELD)+, EMPTY_LINE, DATA)+, SEPARATOR.
+//
+// Another approach is pattern searching on the fly. In this approach, the separator search state machine is extended
+// to also handle the header as well. Separate buffers are created to store the three different types of data that
+// the multipart stream header contains:
+// - Separator Bytes
+// - Header Bytes
+// - Data Bytes
+// Storing separator bytes is necessary because these bytes will turn out to be data bytes as soon as it turns out
+// that not the entire separator matches. Then these bytes need to be added to the data bytes.
+// The data bytes buffer not strictly needed, but might facilitate writing the data to a device that requires alignment.
+// Storing the header bytes facilitates in parsing the header, because this guarantees that all the data is
+// sequential, and doesn't wrap around the boundaries of a circular buffer, as is the case with a FIFO.
+// The state machine should have the following states:
+// [ wait_separator, separator, header, data ]. In the first state, all non-matching data is thrown away.
+
+void _ParseMultiPartHeader(FileStream_t *stream)
+{
+    char *p = (char *)stream->header + 2;
+    char *lines[8];
+    int line = 0;
+    p[stream->header_size] = 0;
+
+    // First split the header buffer into lines by searching for the \r\n sequences
+    // The method used here is to separate on \r and skip the following \n.
+    for(line = 0; line < 8; line++) {
+        lines[line] = strsep(&p, "\r");
+        if (!p) {
+            break;
+        }
+        p++; // skip the \n
+        if (! *(lines[line])) {
+            break;
+        }
+    }
+    // p is now pointing to the byte after the header, if any.
+
+    // Step 2: Split the remaining lines into fields.
+    // All subsequent lines are in the form of KEY ": " VALUE, although the space is not mandatory by spec.
+    // so leading spaces need to be trimmed, and the separator is simply ':'
+    int count = 0;
+    for(line = 0; line < 8; line++) {
+        if (! *(lines[line])) {
+            break;
+        }
+        p = lines[line];
+        stream->fields[count].key = strsep(&p, ":");
+        if (p) {
+            while(*p == ' ') {
+                p++;
+            }
+            stream->fields[count].value = p;
+            // printf("'%s' -> '%s'\n", stream->fields[count].key, stream->fields[count].value);
+            count++;
+        } else {
+            break;
+        }
+    }
+    stream->field_count = count;
+
+    if (stream->block_cb) {
+        BodyDataBlock_t block = { eSubHeader, (const char *)stream->fields, count };
+        stream->block_cb(&block);
+    }
+}
+
+void attachment_block_debug(BodyDataBlock_t *block)
+{
+    switch(block->type) {
+        case eStart:
+            printf("--- Start of Body --- (Type: %s)\n", block->data);
+            break;
+        case eSubHeader:
+            printf("--- SubHeader ---\n");
+            HTTPHeaderField *f = (HTTPHeaderField *)block->data;
+            for(int i=0; i < block->length; i++) {
+                printf("%s => '%s'\n", f[i].key, f[i].value);
+            }
+            break;
+        case eDataBlock:
+            printf("--- Data (%d bytes)\n", block->length);
+/*
+            if (block->length == 4096) {
+                dump_hex_relative(block->data, 32);
+                printf("... <truncated>\n");
+            } else {
+                dump_hex_relative(block->data, 32);
+                int offset = (block->length - 64);
+                if (offset < 32)
+                    offset = 32;
+                offset &= ~0xF;
+                printf("... <not shown %d>\n", offset-32);
+                dump_hex_relative(block->data + offset, block->length - offset);
+                printf("`---\n");
+            }
+*/
+            break;
+        case eDataEnd:
+            printf("--- End of Data ---\n");
+            break;
+        case eTerminate:
+            printf("--- End of Body ---\n");
+            break;
+    }
+}
+static void expunge(FileStream_t *stream)
+{
+    if (stream->block_cb) {
+        BodyDataBlock_t block = (BodyDataBlock_t){ eDataBlock, stream->data, stream->data_size, NULL };
+        stream->block_cb(&block);
+    }
+    stream->data_size = 0;
+}
+
+static int filestream_in(void *context, uint8_t *buf, int len)
+{
+    FileStream_t *stream = (FileStream_t *)context;
+
+    static const char c_header_end[4] = "\r\n\r\n";
+
+    switch (stream->state) {
+        case eInit: // the first time that this function is called is to set it up
+        // after the request header has been parsed. It is called without data.
+            if (stream->block_cb) {
+                BodyDataBlock_t block = { eStart, stream->type, strlen(stream->type), NULL };
+                stream->block_cb(&block);
+            }
+            if (!strncasecmp(stream->type, "multipart", 9)) { // 9 chars
+                char *b = strstr(stream->type, "boundary="); // 9 chars
+                if (b) {
+                    len = strlen(b+9);
+                    stream->boundary = malloc(len + 5); // \r\n-- + len + \r\n\0
+                    stream->boundary[0] = '\r';
+                    stream->boundary[1] = '\n';
+                    stream->boundary[2] = '-';
+                    stream->boundary[3] = '-';
+                    strcpy(stream->boundary + 4, b + 9);
+                    stream->boundary[len+4] = 0;
+                    stream->boundary_length = strlen(stream->boundary);
+                    stream->match_state = 2; // the data we receive starts with a boundary, but without the \r\n
+                    stream->state = eDitch;
+                    return 0;
+                } else {
+                    printf("boundary not found in multipart\n");
+                }
+            }
+            stream->state = eBinary;
+            break;
+
+        case eBinary:
+            if (len == 0) {
+                if (stream->block_cb) {
+                    BodyDataBlock_t block = { eTerminate, NULL, 0, NULL };
+                    stream->block_cb(&block);
+                }
+                // Since we are the owner of this struct, we can free it
+                free(stream);
+            } else {
+                if (stream->block_cb) {
+                    BodyDataBlock_t block = { eDataBlock, (const char *)buf, len, NULL };
+                    stream->block_cb(&block);
+                }
+            }
+            break;
+
+        case eDitch: // idle, looking for separator to start with
+        case eData:
+        case eHeader:
+            // all states together, because this is where this function
+            // enters. Could have done this with a sub state
+            for(int i=0;i<len;i++) {
+                if (stream->state != eHeader) {
+                    if (stream->match_state == stream->boundary_length) {
+                        stream->match_state = 0;
+                        if (stream->data_size) {
+                            expunge(stream);
+                        }
+                        if ((stream->block_cb) && (stream->state == eData)) {
+                            BodyDataBlock_t block = { eDataEnd, NULL, 0, NULL };
+                            stream->block_cb(&block);
+                        }
+                        // After a separator there is always a header.
+                        // If the header is 0 bytes, we are done.
+                        stream->state = eHeader;
+                        stream->header_size = 0;
+                    } else if (buf[i] == stream->boundary[stream->match_state]) {
+                        stream->match_state++;
+                    } else if (stream->match_state != 0) {
+                        switch(stream->state) {
+                            case eHeader:
+                                memcpy(stream->header + stream->header_size, stream->boundary, stream->match_state);
+                                stream->header_size += stream->match_state;
+                                break;
+                            case eData:
+                                // printf("copying bondary bytes to data %d\n", stream->match_state);
+                                for(int j=0;j<stream->match_state;j++) {
+                                    stream->data[stream->data_size++] = stream->boundary[j];
+                                    if (stream->data_size == 4096) {
+                                        expunge(stream);
+                                    }
+                                }
+                                break;
+                            default:
+                                printf("unknown state %c\n", buf[i]);
+                         }
+                         stream->match_state = 0;
+                    }
+                } else {
+                    // in header state
+                    if (stream->match_state == 4) {
+                        stream->match_state = 0;
+                        // After the empty line of the header there is always data.
+                        _ParseMultiPartHeader(stream);
+                        // If the header is 0 bytes, we are done.
+                        stream->state = eData;
+                        stream->header_size = 0;
+                    } else if (buf[i] == c_header_end[stream->match_state]) {
+                        stream->match_state++;
+                    } else {
+                        stream->match_state = 0;
+                    }
+                }
+                // where to store the byte?
+                switch(stream->state) {
+                    case eData:
+                        if (stream->match_state == 0) {
+                            stream->data[stream->data_size++] = buf[i];
+                            if (stream->data_size == 4096) {
+                                expunge(stream);
+                            }
+                        }
+                        break;
+                    case eHeader:
+                        stream->header[stream->header_size++] = buf[i];
+                        break;
+                    case eDitch:
+                        break;
+                    default:
+                        printf("store %d %c\n", stream->state, buf[i]);
+                }
+            }
+            if (len == 0) {
+                stream->state = eTerminated;
+                if (stream->data_size) {
+                    expunge(stream);
+                }
+                if (stream->block_cb) {
+                    BodyDataBlock_t block = { eTerminate, NULL, 0, NULL };
+                    stream->block_cb(&block);
+                }
+                free(stream);
+            }
+            break;
+
+        default:
+            printf("Unexpected state filestream_in\n");
+
+    }
+    return len;
+}
+
+/* Example implementation of API */
+void ApiBody(BodyDataBlock_t *blk, HTTPRespMessage *res)
+{
+//    char attach[1024];
+}
+
+
+void Api(UrlComponents *c, HTTPReqMessage *req, HTTPRespMessage *res)
+{
     int n, i = 0;
     char *p;
     char header[] = "HTTP/1.1 200 OK\r\nConnection: close\r\n"
@@ -102,9 +433,19 @@ void Api(UrlComponents *c, HTTPRespMessage *res) {
     i += n;
     p += n;
 
-    //p -= n;
-
     res->_index = i;
+
+/*
+    if (req->BodySize) {
+        req->BodyCB = &filestream_in;
+        FileStream_t * stream = malloc(sizeof(FileStream_t));
+        memset(stream, 0, sizeof(FileStream_t)); // also sets the state to eInit
+        req->BodyContext = stream;
+        stream->type = req->ContentType;
+        stream->block_cb = &ApiBody;
+        filestream_in(stream, NULL, 0); // Initialize
+    }
+*/
 }
 
 static const char *get_mime_type(const char *filename)
@@ -123,9 +464,23 @@ static const char *get_mime_type(const char *filename)
 }
 
 #if ENABLE_STATIC_FILE 
+int filestream_out(void *context, uint8_t *buf, int len)
+{
+    int result = fread(buf, 1, len, (FILE *)context);
+    if (!result) {
+        fclose((FILE *)context);
+    }
+    return result;
+}
+
+
 /* Try to read static files under static folder. */
 uint8_t _ReadStaticFiles(HTTPReqMessage *req, HTTPRespMessage *res)
 {
+//    if (!(req->Header.Method == HTTP_GET)) {
+//        return 0;
+//    }
+
     uint8_t found = 0;
     int8_t depth = 0;
     const char *uri = req->Header.URI;
@@ -133,7 +488,6 @@ uint8_t _ReadStaticFiles(HTTPReqMessage *req, HTTPRespMessage *res)
     size_t i;
 
     FILE *fp;
-    int size;
     char path[128] = {STATIC_FILE_FOLDER};
 
     const char header[] = "HTTP/1.1 200 OK\r\nConnection: close\r\n"
@@ -153,37 +507,23 @@ uint8_t _ReadStaticFiles(HTTPReqMessage *req, HTTPRespMessage *res)
         }
     }
 
-    res->fp = NULL;
-
     if ((depth >= 0) && (uri[i - 1] != '/')) {
         /* Try to open and load the static file. */
         memcpy(path + strlen(STATIC_FILE_FOLDER), uri, strlen(uri));
         fp = fopen(path, "r");
         if (fp != NULL) {
-            fseek(fp, 0, SEEK_END);
-            size = ftell(fp);
-            fseek(fp, 0, SEEK_SET);
-
             /* Build HTTP OK header. */
             // n = strlen(header);
             // memcpy(res->_buf, header, n);
             n = sprintf((char *)res->_buf, header, get_mime_type(path));
             i = n;
             found = 1;
+            res->_index = i;
 
-            if (size < MAX_BODY_SIZE) {
-                /* Build HTTP body. */
-                n = fread(res->_buf + i, 1, size, fp);
-                i += n;
-                res->_index = i;
-                fclose(fp);
-                res->fp = NULL;
-            } else { // use streaming mode
-                n = fread(res->_buf + i, 1, MAX_BODY_SIZE, fp);
-                i += n;
-                res->_index = i;
-                res->fp = fp; // read the remainder from file!
-            }
+            // always switch to streaming mode
+            res->BodyCB = &filestream_out;
+            res->BodyContext = fp;
+
         } else {
             printf("Not found: '%s'\n", path);
         }
@@ -207,45 +547,35 @@ void _NotFound(HTTPReqMessage *req, HTTPRespMessage *res)
 /* Dispatch an URI according to the route table. */
 void Dispatch(HTTPReqMessage *req, HTTPRespMessage *res)
 {
-    uint16_t i;
-    size_t n;
-    const char *req_uri = req->Header.URI;
     uint8_t found = 0;
 
-    /* Check the routes. */
-    for (i = 0; i < routes_used; i++) {
-        /* Compare method. */
-        if (req->Header.Method == routes[i].method) {
-            /* Compare URI. */
-            n = strlen(routes[i].uri);
-            if (memcmp(req_uri, routes[i].uri, n) == 0)
-                found = 1;
-            else
-                continue;
+    // By default, there is no callback installed for the body data
+    // such that it gets ditched properly.
 
-            if ((found == 1) && ((req_uri[n] == '\0') || (req_uri[n] == '\?'))) {
-                /* Found and dispatch the server application function. */
-                routes[i].saf(req, res);
-                break;
-            } else {
-                found = 0;
-            }
-        }
+/* For now we catch the data always with the attachment parser */
+    if (req->BodySize) {
+        req->BodyCB = &filestream_in;
+        FileStream_t * stream = malloc(sizeof(FileStream_t));
+        memset(stream, 0, sizeof(FileStream_t)); // also sets the state to eInit
+        req->BodyContext = stream;
+        stream->type = req->ContentType;
+        stream->block_cb = &attachment_block_debug;
+        filestream_in(stream, NULL, 0); // Initialize
     }
 
+
     if (found != 1) {
-        UrlComponents *c;
-        if ((c = parse_url_header(&req->Header)) != NULL) {
-            Api(c, res);
-            /*
-            printf("method: %d\nroute: %s\npath: %s\ncommand: %s\nquerystring: %s\nlength: %d\n",
-            c->method, c->route, c->path, c->command, c->querystring, c->parameters_len);
-            for (int i = 0; i < c->parameters_len; i++) {
-                printf("'%s' is '%s'\n", c->parameters[i]->name, c->parameters[i]->value);
-            }
-            */
+#if ENABLE_STATIC_FILE == 2 // Running on Ultimate
+        if (execute_api_v1(req, res) == 0) {
             found = 1;
         }
+#else
+        UrlComponents *c;
+        if ((c = parse_url_header(&req->Header)) != NULL) {
+            Api(c, req, res);
+            found = 1;
+        }
+#endif
     }
 
 #if ENABLE_STATIC_FILE
