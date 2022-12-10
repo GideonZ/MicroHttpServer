@@ -11,7 +11,6 @@
 #ifndef MHS_PORT
 #define MHS_PORT 80
 #define close lwip_close
-#define 
 #define LWIP 1
 #else
 #define LWIP 0
