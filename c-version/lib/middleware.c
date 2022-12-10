@@ -408,11 +408,12 @@ void ApiBody(BodyDataBlock_t *block)
     switch(block->type) {
         case eStart:
             sprintf(temp, "<h3>Attachments</h3><ul>\n");
-            strcpy(body->filename, "Unnamed");
             body->filesize = 0;
+            strcpy(body->filename, "raw data");
             break;
         case eSubHeader:
             body->filesize = 0;
+            strcpy(body->filename, "Unnamed");
             HTTPHeaderField *f = (HTTPHeaderField *)block->data;
             for(int i=0; i < block->length; i++) {
                 if (strcasecmp(f[i].key, "Content-Disposition") == 0) {
@@ -433,7 +434,7 @@ void ApiBody(BodyDataBlock_t *block)
             body->filesize += block->length;
             break;
         case eDataEnd:
-            sprintf(temp, "<li>'%s' <tt>Size: %d</tt></li>\n", body->filename, body->filesize);
+            sprintf(temp, "<li>'%s' <tt> (Size: %d)</tt></li>\n", body->filename, body->filesize);
             break;
         case eTerminate:
             sprintf(temp, "</ul>\n</body></html>\n");
@@ -489,14 +490,6 @@ void Api(UrlComponents *c, HTTPReqMessage *req, HTTPRespMessage *res)
     memcpy(p, closing, n);
     i += n;
     p += n;
-
-    if(req->BodySize) {
-        sprintf(comp, "<h2>Body Length: %ld</h2>", req->BodySize);
-        n = strlen(comp);
-        memcpy(p, comp, n);
-        i += n;
-        p += n;
-    }
     res->_index = i;
 
     if (req->BodySize) {
@@ -518,8 +511,8 @@ void Api(UrlComponents *c, HTTPReqMessage *req, HTTPRespMessage *res)
         memcpy(p, tail, n);
         i += n;
         p += n;
+        res->_index = i;
     }
-    res->_index = i;
 }
 
 static const char *get_mime_type(const char *filename)
