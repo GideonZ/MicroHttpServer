@@ -381,6 +381,9 @@ static int filestream_in(void *context, uint8_t *buf, int len)
                     BodyDataBlock_t block = { eTerminate, NULL, 0, stream->block_context };
                     stream->block_cb(&block);
                 }
+                if(stream->boundary) {
+                    free(stream->boundary);
+                }
                 free(stream);
             }
             break;
@@ -438,6 +441,7 @@ void ApiBody(BodyDataBlock_t *block)
             break;
         case eTerminate:
             sprintf(temp, "</ul>\n</body></html>\n");
+            free(body);
             break;
     }
     int n = strlen(temp);
@@ -635,6 +639,7 @@ void Dispatch(HTTPReqMessage *req, HTTPRespMessage *res)
         UrlComponents *c;
         if ((c = parse_url_header(&req->Header)) != NULL) {
             Api(c, req, res);
+            delete_url_components(c);
             found = 1;
         }
 #endif
