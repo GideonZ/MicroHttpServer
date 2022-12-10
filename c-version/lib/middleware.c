@@ -581,14 +581,21 @@ uint8_t _ReadStaticFiles(HTTPReqMessage *req, HTTPRespMessage *res)
         }
     }
 
-    if ((depth >= 0) && (uri[i - 1] != '/')) {
+    if (depth >= 0) {
         /* Try to open and load the static file. */
-        memcpy(path + strlen(STATIC_FILE_FOLDER), uri, strlen(uri));
+        strcat(path, uri);
+        int corr = 0;
+        if (path[strlen(path)-1] == '/') {
+            path[strlen(path)-1] = 0; // cut last slash
+            corr = 1;
+        }
+        if ((strlen(uri) - corr) == 0) {
+            strcat(path, "/index.html");
+        }
+
         fp = fopen(path, "r");
         if (fp != NULL) {
             /* Build HTTP OK header. */
-            // n = strlen(header);
-            // memcpy(res->_buf, header, n);
             n = sprintf((char *)res->_buf, header, get_mime_type(path));
             i = n;
             found = 1;
