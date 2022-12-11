@@ -113,6 +113,9 @@ void attachment_block_debug(BodyDataBlock_t *block)
         case eStart:
             printf("--- Start of Body --- (Type: %s)\n", block->data);
             break;
+        case eDataStart:
+            printf("--- Raw Data Start ---\n");
+            break;
         case eSubHeader:
             printf("--- SubHeader ---\n");
             HTTPHeaderField *f = (HTTPHeaderField *)block->data;
@@ -124,16 +127,16 @@ void attachment_block_debug(BodyDataBlock_t *block)
             printf("--- Data (%d bytes)\n", block->length);
 /*
             if (block->length == 4096) {
-                dump_hex_relative(block->data, 32);
+                _dump_hex_relative(block->data, 32);
                 printf("... <truncated>\n");
             } else {
-                dump_hex_relative(block->data, 32);
+                _dump_hex_relative(block->data, 32);
                 int offset = (block->length - 64);
                 if (offset < 32)
                     offset = 32;
                 offset &= ~0xF;
                 printf("... <not shown %d>\n", offset-32);
-                dump_hex_relative(block->data + offset, block->length - offset);
+                _dump_hex_relative(block->data + offset, block->length - offset);
                 printf("`---\n");
             }
 */
@@ -188,6 +191,11 @@ static int filestream_in(void *context, uint8_t *buf, int len)
                     printf("boundary not found in multipart\n");
                 }
             }
+            if (stream->block_cb) {
+                BodyDataBlock_t block = { eDataStart, stream->type, strlen(stream->type), stream->block_context };
+                stream->block_cb(&block);
+            }
+
             stream->state = eBinary;
             break;
 
@@ -240,7 +248,7 @@ static int filestream_in(void *context, uint8_t *buf, int len)
                                 stream->header_size += stream->match_state;
                                 break;
                             case eData:
-                                // printf("copying bondary bytes to data %d\n", stream->match_state);
+                                // printf("copying boundary bytes to data %d (pos in data: %d)\n", stream->match_state, i);
                                 for(int j=0;j<stream->match_state;j++) {
                                     stream->data[stream->data_size++] = stream->boundary[j];
                                     if (stream->data_size == 4096) {
@@ -250,8 +258,12 @@ static int filestream_in(void *context, uint8_t *buf, int len)
                                 break;
                             default:
                                 printf("unknown state %c\n", buf[i]);
-                         }
-                         stream->match_state = 0;
+                        }
+                        if (buf[i] == stream->boundary[0]) {
+                            stream->match_state = 1;
+                        } else {
+                            stream->match_state = 0;
+                        }
                     }
                 } else {
                     // in header state

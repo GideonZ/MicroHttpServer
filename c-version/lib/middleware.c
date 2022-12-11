@@ -8,55 +8,6 @@
 #include "multipart.h"
 #include "dummy_api.h"
 
-#if ENABLE_STATIC_FILE != 2
-/* Debug */
-#define DUMP_BYTES 16
-void dump_hex_actual(const void *pp, int len, int relative)
-{
-    int w,t;
-    uint8_t c;
-    uint8_t *p = (uint8_t *)pp;
-    
-	for(w=0;w<len;w+=DUMP_BYTES) {
-        if(relative)
-            printf("%4x: ", w);
-        else
-		    printf("%p: ", p + w);
-        for(t=0;t<DUMP_BYTES;t++) {
-            if((w+t) < len) {
-		        printf("%02x ", *((uint8_t *)&(p[w+t])));
-		    } else {
-		        printf("   ");
-		    }
-		}
-        for(t=0;t<DUMP_BYTES;t++) {
-            if((w+t) < len) {
-                c = p[w+t] & 0x7F;
-
-                if((c >= 0x20)&&(c <= 0x7F)) {
-                    printf("%c", c);
-                } else {
-                    printf(".");
-                }
-		    } else {
-		        break;
-		    }
-		}
-		printf("\n");
-	}
-}
-
-void dump_hex(const void *pp, int len)
-{
-    dump_hex_actual(pp, len, 0);
-}
-
-void dump_hex_relative(const void *pp, int len)
-{
-    dump_hex_actual(pp, len, 1);
-}
-#endif
-
 /* Known Mime Types */
 typedef struct {
     const char *extension;

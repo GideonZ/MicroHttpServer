@@ -11,7 +11,7 @@
 #if (ENABLE_STATIC_FILE == 1) && !(defined STATIC_FILE_FOLDER)
 #define STATIC_FILE_FOLDER "static"
 #elif (ENABLE_STATIC_FILE == 2) && !(defined STATIC_FILE_FOLDER)
-#define STATIC_FILE_FOLDER "/Temp"
+#define STATIC_FILE_FOLDER "/Flash/html"
 #endif
 
 /* Data type of server application function */

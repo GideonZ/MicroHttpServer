@@ -20,6 +20,9 @@ void ApiBody(BodyDataBlock_t *block)
     switch(block->type) {
         case eStart:
             sprintf(temp, "<h3>Attachments</h3><ul>\n");
+            strcpy(body->filename, "WRONG!");
+            break;
+        case eDataStart:
             body->filesize = 0;
             strcpy(body->filename, "raw data");
             break;

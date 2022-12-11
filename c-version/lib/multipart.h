@@ -5,6 +5,7 @@
 
 typedef enum {
     eStart = 0,
+    eDataStart,
     eSubHeader,
     eDataBlock,
     eDataEnd,
