@@ -1,5 +1,13 @@
 # Micro HTTP Server
 
+## About this fork
+This once was the basis for the HTTP Daemon for the Ultimate related projects. However, it quickly showed that it was buggy and not capable of
+serving files that were larger than the pre-allocated response buffer. This version has been greatly improved. Bugs have been fixed. In addition,
+it can now serve larger files and also has gotten support for parsing multipart mime posts in a streaming way. Is it still really simple? Probably not. It still runs on a micro controller, though.
+
+The route mechanism has been replaced by a RESTful API parser, as designed by Johan Smolinski.
+
+# Original text follows
 It is a really simple HTTP server for prototyping.
 
 One of the major purpose is that it can be ported on an embedded system (including micro controller unit level).
