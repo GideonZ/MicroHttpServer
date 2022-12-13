@@ -138,6 +138,12 @@ int parse_url_static(const char *url, UrlComponents *components)
     // Fix path to allow spaces with %20
     url_decode(components->url_copy, components->url_copy, 0);
 
+    // If the command is empty, we set it explicitly to "none".
+    // This is necessary for how the route table works.
+    if (strlen(components->command) == 0) {
+        components->command = "none";
+    }
+
     // Defaults
     components->method = HTTP_GET; // default
     components->parameters_len = 0;
