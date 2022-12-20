@@ -65,4 +65,5 @@ This function will also set the http method correctly.
 */
 int parse_header_to_url_components(HTTPReqHeader *hdr, UrlComponents *c);
 
+
 #endif
