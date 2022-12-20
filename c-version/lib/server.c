@@ -101,6 +101,9 @@ void _HTTPServerAccept(HTTPServer *srv)
             if (http_req[i].clisock == -1) {
                 DebugMsg("Accept client %d.  %s:%d\n", i, inet_ntoa(cli_addr.sin_addr), (int)ntohs(cli_addr.sin_port));
                 srv->available_connections -= 1;
+                if (srv->available_connections == 0) {
+                    FD_CLR(srv->sock, &(srv->_read_sock_pool));
+                }
                 http_req[i].clisock = clisock;
                 http_req[i].req.Header.FieldCount = 0;
                 http_req[i].res.Header.FieldCount = 0;
@@ -418,6 +421,8 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
                 http_req[i].clisock = -1;
                 http_req[i].work_state = NOTWORK_SOCKET;
                 srv->available_connections += 1;
+                // at least one free socket, so accept is now allowed
+                FD_SET(srv->sock, &(srv->_read_sock_pool));
             }
         }
     }
