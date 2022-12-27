@@ -72,7 +72,7 @@ TEST_F(RouteTest, ParseUrl_Route) {
     EXPECT_EQ(HTTP_GET, method);
     EXPECT_EQ("files", route);
     EXPECT_EQ("", path);
-    EXPECT_EQ("", command);
+    EXPECT_EQ("none", command);
     EXPECT_EQ("", querystring);
 
     delete_url_components(c);
@@ -95,7 +95,7 @@ TEST_F(RouteTest, ParseUrl_RoutePath) {
     EXPECT_EQ(HTTP_GET, method);
     EXPECT_EQ("route", route);
     EXPECT_EQ("some/path/", path);
-    EXPECT_EQ("", command);
+    EXPECT_EQ("none", command);
     EXPECT_EQ("", querystring);
 
     delete_url_components(c);
@@ -127,7 +127,7 @@ TEST_F(RouteTest, ParseUrl_RouteQuerystring) {
     EXPECT_EQ(HTTP_GET, method);
     EXPECT_EQ("route", route);
     EXPECT_EQ("", path);
-    EXPECT_EQ("", command);
+    EXPECT_EQ("none", command);
     EXPECT_EQ("querystring", querystring);
 
     delete_url_components(c);
