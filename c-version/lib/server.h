@@ -6,7 +6,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define HTTP_BUFFER_SIZE (4096)
+#define HTTP_MAX_HEADER_SIZE (2048)
+#define HTTP_BUFFER_SIZE (2048)
 
 #ifndef MHS_PORT
 #define MHS_PORT 80
@@ -54,6 +55,8 @@ typedef enum { HTTP_UNKNOWN, HTTP_GET, HTTP_POST, HTTP_PUT, HTTP_DELETE } HTTPMe
 
 typedef struct _HTTPReqHeader
 {
+    char _buffer[HTTP_MAX_HEADER_SIZE+4];
+    int _buffer_valid;
     HTTPMethod Method;
     const char *URI;
     const char *Version;
@@ -61,16 +64,40 @@ typedef struct _HTTPReqHeader
     unsigned int FieldCount;
 } HTTPReqHeader;
 
+typedef enum {
+    eReq_Header,
+    eReq_HeaderTooBig,
+    eReq_HeaderDone,
+    eReq_Body,
+} t_ProtocolRecvState;
+
+typedef enum {
+    eNoBody,
+    eUntilDisconnect,
+    eTotalSize,
+    eChunked,
+} t_BodyType;
+
+typedef enum {
+    eChunkHeader,
+    eChunkBody,
+    eChunkTrailer,
+} t_ChunkState;
+
 typedef struct _HTTPReqMessage
 {
+    t_ProtocolRecvState protocol_state;
     HTTPReqHeader Header;
-    uint8_t *Body;
     const char *ContentType;
-    size_t   BodySize;
-    size_t   BodyDataAvail;
     HTTPBODY_CALLBACK BodyCB;
     void    *BodyContext;
-    uint8_t  _buf[HTTP_BUFFER_SIZE+4];
+    size_t   bodySize;
+    t_BodyType bodyType;
+    t_ChunkState chunkState;
+    size_t   chunkRemain;
+    uint8_t  _buf[HTTP_BUFFER_SIZE+4]; // receive buffer
+    int      _valid;
+    int      _used;
 } HTTPReqMessage;
 
 typedef struct _HTTPRespHeader
@@ -93,6 +120,7 @@ typedef struct _HTTPRespMessage
 } HTTPRespMessage;
 
 typedef void (*HTTPREQ_CALLBACK)(HTTPReqMessage *, HTTPRespMessage *);
+uint8_t ProcessClientData(HTTPReqMessage *req, HTTPRespMessage *resp, HTTPREQ_CALLBACK callback);
 
 void HTTPServerInit(HTTPServer *, uint16_t);
 void HTTPServerRun(HTTPServer *, HTTPREQ_CALLBACK);
@@ -103,8 +131,17 @@ void HTTPServerRun(HTTPServer *, HTTPREQ_CALLBACK);
         }                                                                                                              \
     }
 void HTTPServerClose(HTTPServer *);
+//typedef void (*SOCKET_CALLBACK)(void *);
 
-//#define DEBUG_MSG 1
+#define NOTWORK_SOCKET 0
+#define READING_SOCKET_HDR  1
+#define READING_SOCKET_BODY 2
+#define READEND_SOCKET 4
+#define WRITING_SOCKET 8
+#define WRITEEND_SOCKET 16
+#define CLOSE_SOCKET 128
+
+#define DEBUG_MSG 1
 
 #ifdef DEBUG_MSG
 #include <stdio.h>

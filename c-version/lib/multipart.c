@@ -28,23 +28,13 @@ typedef struct _FileStream
     void *block_context;
 } FileStream_t;
 
-// Finding the separators in a stream is not that easy when the data comes in in packets, as the separators can be
-// partly on packet boundaries. Secondly, it is not possible to stream out all data to the destination directly, because
-// part of the last data might belong to the boundary. One solution is found in the use of a FIFO where the data packets
-// are pushed into. This allows some of the data to be held back before forwarding it to the destination. The separator
-// detection is based on a state machine. The state of the string comparison is kept, at all times, in particular at the
-// end of a data block, such that the string comparison can continue when new data arrives. In order for this mechanism
-// to work well, there is never more data taken out from the FIFO than the number of available data bytes minus the
-// separator length. Secondly, the FIFO should always be able to take new data in. The maximum size of a data block is
-// known. The chosen FIFO size equals two data blocks. This also allows of the parsing of the multipart mime header,
-// while it is in the fifo; if the block size is larger than the expected header. On top of all this, a state machine
-// that keeps track of the order of the data elements. A multipart form is structured like this:
+// A multipart form is structured like this:
 // (--, SEPARATOR, \r\n, (HEADER FIELD, \r\n)+, \r\n, DATA)+), --, SEPARATOR, \r\n.
 // When the separator to search for is extended with as --SEP\r\n, and the \r\n are included in the header fields, this
 // simplifies to:
 // (SEPARATOR, (HEADER FIELD)+, EMPTY_LINE, DATA)+, SEPARATOR.
 //
-// Another approach is pattern searching on the fly. In this approach, the separator search state machine is extended
+// The chosen approach is pattern searching on the fly. In this approach, the separator search state machine is extended
 // to also handle the header as well. Separate buffers are created to store the three different types of data that
 // the multipart stream header contains:
 // - Header Bytes
@@ -125,21 +115,6 @@ void attachment_block_debug(BodyDataBlock_t *block)
             break;
         case eDataBlock:
             printf("--- Data (%d bytes)\n", block->length);
-/*
-            if (block->length == 4096) {
-                _dump_hex_relative(block->data, 32);
-                printf("... <truncated>\n");
-            } else {
-                _dump_hex_relative(block->data, 32);
-                int offset = (block->length - 64);
-                if (offset < 32)
-                    offset = 32;
-                offset &= ~0xF;
-                printf("... <not shown %d>\n", offset-32);
-                _dump_hex_relative(block->data + offset, block->length - offset);
-                printf("`---\n");
-            }
-*/
             break;
         case eDataEnd:
             printf("--- End of Data ---\n");

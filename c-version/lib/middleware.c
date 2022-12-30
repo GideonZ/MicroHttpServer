@@ -167,7 +167,7 @@ void Dispatch(HTTPReqMessage *req, HTTPRespMessage *res)
     /* Check static files. */
     if (found != 1) {
 
-        if (req->BodySize) {
+        if (req->bodyType != eNoBody) {
             setup_multipart(req, &attachment_block_debug, NULL);
         }
         found = _ReadStaticFiles(req, res);

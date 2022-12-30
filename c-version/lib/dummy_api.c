@@ -108,7 +108,7 @@ void Api(UrlComponents *c, HTTPReqMessage *req, HTTPRespMessage *res)
     p += n;
     res->_index = i;
 
-    if (req->BodySize) {
+    if (req->bodyType != eNoBody) {
         ApiBody_t *body = malloc(sizeof(ApiBody_t));
         body->msg = res; // This function can write directly into the response data buffer (!)
         setup_multipart(req, &ApiBody, body);
