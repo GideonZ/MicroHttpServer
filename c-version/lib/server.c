@@ -25,26 +25,6 @@ typedef struct _HTTPReq
 
 HTTPReq http_req[MAX_HTTP_CLIENT];
 
-void InitReqHeader(HTTPReqHeader *hdr)
-{
-    hdr->_buffer_valid = 0;
-    hdr->Method = HTTP_UNKNOWN;
-    hdr->FieldCount = 0;
-    hdr->URI = "";
-}
-
-void InitReqMessage(HTTPReqMessage *req)
-{
-    req->protocol_state = eReq_Header;
-    req->ContentType = "";
-    req->BodyCB = NULL;
-    req->_valid = 0;
-    req->_used = 0;
-    req->bodyType = 0;
-    req->bodySize = 0;
-    InitReqHeader(&(req->Header));
-}
-
 void HTTPServerInit(HTTPServer *srv, uint16_t port)
 {
     // Just in case it was not initialized properly in BSS
@@ -116,11 +96,9 @@ void _HTTPServerAccept(HTTPServer *srv)
                 }
                 InitReqMessage(&(http_req[i].req));
                 http_req[i].clisock = clisock;
-                //http_req[i].req._valid = 0;
-                //http_req[i].req.Header.FieldCount = 0;
                 http_req[i].res.Header.FieldCount = 0;
                 http_req[i].windex = 0;
-                http_req[i].work_state = READING_SOCKET_HDR;
+                http_req[i].work_state = READING_SOCKET;
                 break;
             }
         }

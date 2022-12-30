@@ -19,6 +19,32 @@ HTTPMethod HaveMethod(char *method)
     return m;
 }
 
+void InitReqHeader(HTTPReqHeader *hdr)
+{
+    hdr->_buffer_valid = 0;
+    hdr->Method = HTTP_UNKNOWN;
+    hdr->FieldCount = 0;
+    hdr->URI = "";
+}
+
+void InitReqMessage(HTTPReqMessage *req)
+{
+    req->protocol_state = eReq_Header;
+    req->ContentType = "";
+    req->BodyCB = NULL;
+    req->_valid = 0;
+    req->_used = 0;
+    req->bodyType = eNoBody;
+    req->bodySize = 0;
+    InitReqHeader(&(req->Header));
+}
+
+void InitRespMessage(HTTPRespMessage *resp)
+{
+    resp->BodyCB = NULL;
+    resp->_index = 0;
+}
+
 char *GetLineFromBuffer(HTTPReqMessage *req)
 {
     req->_buf[req->_valid] = '\0'; // allowed!
@@ -317,7 +343,7 @@ uint8_t ProcessClientData(HTTPReqMessage *req, HTTPRespMessage *resp, HTTPREQ_CA
     if (req->protocol_state == eReq_Body) {
         n = _GetBody(req);
         if (n > 0) {
-            return READING_SOCKET_BODY;
+            return READING_SOCKET;
         } else if(n == 0) {
             // Send a Terminate
             if (req->BodyCB) {
@@ -331,5 +357,5 @@ uint8_t ProcessClientData(HTTPReqMessage *req, HTTPRespMessage *resp, HTTPREQ_CA
             return CLOSE_SOCKET; // error
         }
     }
-    return READING_SOCKET_HDR; // or body, doesn't matter
+    return READING_SOCKET;
 }

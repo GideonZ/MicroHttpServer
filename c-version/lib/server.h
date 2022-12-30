@@ -115,9 +115,11 @@ typedef struct _HTTPRespMessage
     HTTPBODY_CALLBACK BodyCB;
     void *BodyContext;
     size_t _index;
-    uint8_t *Body;
     uint8_t _buf[HTTP_BUFFER_SIZE+4];
 } HTTPRespMessage;
+
+void InitReqMessage(HTTPReqMessage *req);
+void InitRespMessage(HTTPRespMessage *resp);
 
 typedef void (*HTTPREQ_CALLBACK)(HTTPReqMessage *, HTTPRespMessage *);
 uint8_t ProcessClientData(HTTPReqMessage *req, HTTPRespMessage *resp, HTTPREQ_CALLBACK callback);
@@ -134,12 +136,11 @@ void HTTPServerClose(HTTPServer *);
 //typedef void (*SOCKET_CALLBACK)(void *);
 
 #define NOTWORK_SOCKET 0
-#define READING_SOCKET_HDR  1
-#define READING_SOCKET_BODY 2
-#define READEND_SOCKET 4
-#define WRITING_SOCKET 8
-#define WRITEEND_SOCKET 16
-#define CLOSE_SOCKET 128
+#define READING_SOCKET 1
+#define READEND_SOCKET 2
+#define WRITING_SOCKET 3
+#define WRITEEND_SOCKET 4
+#define CLOSE_SOCKET 5
 
 #define DEBUG_MSG 1
 
