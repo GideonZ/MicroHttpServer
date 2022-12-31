@@ -309,7 +309,7 @@ void setup_multipart(HTTPReqMessage *req, BODY_DATABLOCK_CB data_cb, void *data_
     FileStream_t *stream = (FileStream_t *)malloc(sizeof(FileStream_t));
     memset(stream, 0, sizeof(FileStream_t)); // also sets the state to eInit
     req->BodyContext = stream;
-    stream->type = req->ContentType;
+    stream->type = req->ContentType ? req->ContentType : "";
     stream->block_cb = data_cb;
     stream->block_context = data_context;
     filestream_in(stream, NULL, 0); // Initialize

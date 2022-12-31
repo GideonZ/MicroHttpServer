@@ -336,6 +336,10 @@ uint8_t ProcessClientData(HTTPReqMessage *req, HTTPRespMessage *resp, HTTPREQ_CA
         callback(req, resp); // early call to processor to set up body absorber
         if (req->bodyType != eNoBody) {
             req->protocol_state = eReq_Body;
+            if (req->_valid == req->_used) {
+                req->_valid = req->_used = 0;
+                return READING_SOCKET;
+            }
         } else {
             return WRITING_SOCKET;
         }

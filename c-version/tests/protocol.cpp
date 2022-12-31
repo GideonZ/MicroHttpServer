@@ -57,7 +57,7 @@ void callback(HTTPReqMessage *req, HTTPRespMessage *resp)
 TEST_F(HttpProtocolTest, Post_With_HyperLibrary)
 {
     uint8_t *data = (uint8_t *)post_hyper;
-    int len = sizeof(post_hyper);
+    int len = sizeof(post_hyper)-1; // remove trailing 0;
 
     HTTPReqMessage req;
     HTTPRespMessage resp;
@@ -87,7 +87,7 @@ TEST_F(HttpProtocolTest, Post_With_HyperLibrary)
 TEST_F(HttpProtocolTest, Post_With_RekwestLibrary)
 {
     uint8_t *data = (uint8_t *)post_rekwest;
-    int len = sizeof(post_rekwest);
+    int len = sizeof(post_rekwest)-1; // remove trailing 0;
 
     HTTPReqMessage req;
     HTTPRespMessage resp;
@@ -117,7 +117,7 @@ TEST_F(HttpProtocolTest, Post_With_RekwestLibrary)
 TEST_F(HttpProtocolTest, Post_With_AttoLibrary)
 {
     uint8_t *data = (uint8_t *)post_atto;
-    int len = sizeof(post_atto);
+    int len = sizeof(post_atto)-1; // remove trailing 0;
 
     HTTPReqMessage req;
     HTTPRespMessage resp;
@@ -140,5 +140,34 @@ TEST_F(HttpProtocolTest, Post_With_AttoLibrary)
     EXPECT_STREQ(req.Header.URI, "/v1/runner");
     EXPECT_EQ(req.bodyType, eChunked);
     EXPECT_EQ(total, 4436);
+    EXPECT_EQ(last, 0); // make sure the stream terminates
+}
+
+TEST_F(HttpProtocolTest, Post_With_Postman)
+{
+    uint8_t *data = (uint8_t *)post_postman;
+    int len = sizeof(post_postman)-1; // remove trailing 0;
+
+    HTTPReqMessage req;
+    HTTPRespMessage resp;
+    InitReqMessage(&req);
+    InitRespMessage(&resp);
+    while(len) {
+        int sent = FillBuffer(req, readsize, data, len);
+        EXPECT_NE(0, sent);
+        uint8_t ret = ProcessClientData(&req, &resp, &callback);
+        if (sent == len) {
+            EXPECT_EQ(ret, WRITING_SOCKET);
+        } else {
+            EXPECT_EQ(ret, READING_SOCKET);
+        }
+        len -= sent;
+        data += sent;
+    }
+
+    EXPECT_EQ(req.Header.Method, HTTP_POST);
+    EXPECT_STREQ(req.Header.URI, "/v1/runners");
+    EXPECT_EQ(req.bodyType, eTotalSize);
+    EXPECT_EQ(total, 4126); // RAW size of Commando.sid
     EXPECT_EQ(last, 0); // make sure the stream terminates
 }

@@ -80,11 +80,11 @@ void TestBodyCB(BodyDataBlock_t *block)
 }
 
 ///////////////////////////////////////////////////////////////
-//                  PROTOCOL TESTS                           //
+//                  MULTIPART TESTS                          //
 ///////////////////////////////////////////////////////////////
 TEST_F(HttpMultipartTest, MultiPart1)
 {
-    int len = sizeof(post_rekwest);
+    int len = sizeof(post_rekwest)-1; // remove trailing 0;
     // Search end of header
     const char *data = strstr((const char *)post_rekwest, "\r\n\r\n");
     data += 4;
@@ -103,7 +103,7 @@ TEST_F(HttpMultipartTest, MultiPart1)
     setup_multipart(&req, &TestBodyCB, &bodyContext);
 
     while(len) {
-        int send = (len < 100) ? len : 100;
+        int send = (len < 1000) ? len : 1000;
         //dump_hex_relative(data, send);
         req.BodyCB(req.BodyContext, (const uint8_t *)data, send);
         len -= send;
@@ -112,11 +112,49 @@ TEST_F(HttpMultipartTest, MultiPart1)
     // Terminate
     req.BodyCB(req.BodyContext, NULL, 0);
 
-    resp._buf[resp._index] = '\0';
-
     const char *expected = "Start\n"
         "Commando.sid (Size: 4126)\n"
         "Commando.ssl (Size: 22)\n"
+        "End.\n";
+
+    EXPECT_STREQ((const char *)resp._buf, expected);
+}
+
+TEST_F(HttpMultipartTest, MultiPart2)
+{
+    int len = sizeof(post_postman)-1; // remove trailing 0
+    // Search end of header
+    const char *data = strstr((const char *)post_postman, "\r\n\r\n");
+    data += 4;
+    int header_len = (int)(data - (const char *)post_postman);
+    len -= header_len;
+
+    HTTPReqMessage req;
+    HTTPRespMessage resp;
+    InitReqMessage(&req);
+    InitRespMessage(&resp);
+
+    req.ContentType = NULL;
+    req.bodySize = 4126;
+    req.bodyType = eTotalSize;
+
+    TestBody_t bodyContext;
+    bodyContext.msg = &resp;
+    setup_multipart(&req, &TestBodyCB, &bodyContext);
+
+    while(len) {
+        int send = (len < 1000) ? len : 1000;
+        //dump_hex_relative(data, send);
+        req.BodyCB(req.BodyContext, (const uint8_t *)data, send);
+        len -= send;
+        data += send;
+    }
+    // Terminate
+    req.BodyCB(req.BodyContext, NULL, 0);
+    resp._buf[resp._index] = 0;
+
+    const char *expected = "Start\n"
+        "raw data (Size: 4126)\n"
         "End.\n";
 
     EXPECT_STREQ((const char *)resp._buf, expected);

@@ -30,7 +30,8 @@ typedef int SOCKET;
 // When the function is NULL in the request class, the data will be ditched for the request.
 // When this function returns 0 for the response, the stream will terminate.
 // The context field can be used to identify which stream this call belongs to.
-typedef int (*HTTPBODY_CALLBACK)(void *context, const uint8_t *data, int size);
+typedef int (*HTTPBODY_IN_CALLBACK)(void *context, const uint8_t *data, int size);
+typedef int (*HTTPBODY_OUT_CALLBACK)(void *context, uint8_t *data, int size);
 
 typedef struct _HTTPServer
 {
@@ -89,7 +90,7 @@ typedef struct _HTTPReqMessage
     t_ProtocolRecvState protocol_state;
     HTTPReqHeader Header;
     const char *ContentType;
-    HTTPBODY_CALLBACK BodyCB;
+    HTTPBODY_IN_CALLBACK BodyCB;
     void    *BodyContext;
     size_t   bodySize;
     t_BodyType bodyType;
@@ -112,7 +113,7 @@ typedef struct _HTTPRespHeader
 typedef struct _HTTPRespMessage
 {
     HTTPRespHeader Header;
-    HTTPBODY_CALLBACK BodyCB;
+    HTTPBODY_OUT_CALLBACK BodyCB;
     void *BodyContext;
     size_t _index;
     uint8_t _buf[HTTP_BUFFER_SIZE+4];
