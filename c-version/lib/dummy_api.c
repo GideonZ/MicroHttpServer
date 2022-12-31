@@ -53,7 +53,6 @@ void ApiBody(BodyDataBlock_t *block)
             break;
         case eTerminate:
             sprintf(temp, "</ul>\n</body></html>\n");
-            free(body);
             break;
     }
     int n = strlen(temp);

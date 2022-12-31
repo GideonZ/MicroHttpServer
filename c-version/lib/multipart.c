@@ -99,6 +99,7 @@ static void _ParseMultiPartHeader(FileStream_t *stream)
 
 void attachment_block_debug(BodyDataBlock_t *block)
 {
+    HTTPHeaderField *f;
     switch(block->type) {
         case eStart:
             printf("--- Start of Body --- (Type: %s)\n", block->data);
@@ -108,7 +109,7 @@ void attachment_block_debug(BodyDataBlock_t *block)
             break;
         case eSubHeader:
             printf("--- SubHeader ---\n");
-            HTTPHeaderField *f = (HTTPHeaderField *)block->data;
+            f = (HTTPHeaderField *)block->data;
             for(int i=0; i < block->length; i++) {
                 printf("%s => '%s'\n", f[i].key, f[i].value);
             }
@@ -134,24 +135,25 @@ static void expunge(FileStream_t *stream)
     stream->data_size = 0;
 }
 
-static int filestream_in(void *context, uint8_t *buf, int len)
+static int filestream_in(void *context, const uint8_t *buf, int len)
 {
     FileStream_t *stream = (FileStream_t *)context;
 
-    static const char c_header_end[4] = "\r\n\r\n";
+    static const char c_header_end[5] = "\r\n\r\n";
+    const char *b;
 
     switch (stream->state) {
         case eInit: // the first time that this function is called is to set it up
         // after the request header has been parsed. It is called without data.
             if (stream->block_cb) {
-                BodyDataBlock_t block = { eStart, stream->type, strlen(stream->type), stream->block_context };
+                BodyDataBlock_t block = { eStart, stream->type, (int)strlen(stream->type), stream->block_context };
                 stream->block_cb(&block);
             }
             if (!strncasecmp(stream->type, "multipart", 9)) { // 9 chars
-                char *b = strstr(stream->type, "boundary="); // 9 chars
+                b = strstr(stream->type, "boundary="); // 9 chars
                 if (b) {
                     len = strlen(b+9);
-                    stream->boundary = malloc(len + 5); // \r\n-- + len + \r\n\0
+                    stream->boundary = (char *)malloc(len + 5); // \r\n-- + len + \r\n\0
                     stream->boundary[0] = '\r';
                     stream->boundary[1] = '\n';
                     stream->boundary[2] = '-';
@@ -167,7 +169,7 @@ static int filestream_in(void *context, uint8_t *buf, int len)
                 }
             }
             if (stream->block_cb) {
-                BodyDataBlock_t block = { eDataStart, stream->type, strlen(stream->type), stream->block_context };
+                BodyDataBlock_t block = { eDataStart, stream->type, (int)strlen(stream->type), stream->block_context };
                 stream->block_cb(&block);
             }
 
@@ -304,7 +306,7 @@ static int filestream_in(void *context, uint8_t *buf, int len)
 void setup_multipart(HTTPReqMessage *req, BODY_DATABLOCK_CB data_cb, void *data_context)
 {
     req->BodyCB = &filestream_in;
-    FileStream_t * stream = malloc(sizeof(FileStream_t));
+    FileStream_t *stream = (FileStream_t *)malloc(sizeof(FileStream_t));
     memset(stream, 0, sizeof(FileStream_t)); // also sets the state to eInit
     req->BodyContext = stream;
     stream->type = req->ContentType;

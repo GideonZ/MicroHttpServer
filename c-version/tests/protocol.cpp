@@ -38,7 +38,7 @@ int total;
 int last;
 int readsize = 256;
 
-int bodycb(void *context, uint8_t *buf, int len)
+int bodycb(void *context, const uint8_t *buf, int len)
 {
     EXPECT_LE(len, readsize);
     total += len;
