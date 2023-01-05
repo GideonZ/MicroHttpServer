@@ -65,5 +65,12 @@ This function will also set the http method correctly.
 */
 int parse_header_to_url_components(HTTPReqHeader *hdr, UrlComponents *c);
 
+/*
+Function to convert a URL encoded string to a regular string
+When max is set to 0, it will have no limit on the length, but
+since the output string is always shorter than the input string,
+this mode is perfect for "in place" replacements, when src == dest.
+*/
+void url_decode(char *src, char *dest, int max);
 
 #endif
