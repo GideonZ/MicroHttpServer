@@ -191,7 +191,7 @@ int _HandleChunked(HTTPReqMessage *req)
             char *chunkline = GetLineFromBuffer(req);
             if (chunkline) {
                 req->chunkRemain = strtol(chunkline, NULL, 16);
-                // DebugMsg("Chunkline read: '%s'; size = %ld\n", chunkline, req->chunkRemain);
+                // DebugMsg("Chunkline read: '%s'; size = %d\n", chunkline, (int)req->chunkRemain);
                 if (req->chunkRemain == 0) {
                     return 0; // done
                 }
@@ -205,6 +205,9 @@ int _HandleChunked(HTTPReqMessage *req)
         if (req->chunkState == eChunkBody) {
             uint8_t *p = req->_buf + req->_used;
             int n = req->_valid - req->_used;
+            if (n == 0) {
+                return 1;
+            }
             int available = (n > req->chunkRemain) ? req->chunkRemain : n;
             if (req->BodyCB) {
                 req->BodyCB(req->BodyContext, p, available);

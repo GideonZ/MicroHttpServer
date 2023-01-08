@@ -89,7 +89,8 @@ void _HTTPServerAccept(HTTPServer *srv)
         /* Add into HTTP client requests pool. */
         for (i = 0; i < MAX_HTTP_CLIENT; i++) {
             if (http_req[i].clisock == -1) {
-                DebugMsg("Accept client %d.  %s:%d\n", i, inet_ntoa(cli_addr.sin_addr), (int)ntohs(cli_addr.sin_port));
+                DebugMsg("Accept client %d on socket %d.  %s:%d\n", i, clisock, 
+                    inet_ntoa(cli_addr.sin_addr), (int)ntohs(cli_addr.sin_port));
                 srv->available_connections -= 1;
                 if (srv->available_connections == 0) {
                     FD_CLR(srv->sock, &(srv->_read_sock_pool));

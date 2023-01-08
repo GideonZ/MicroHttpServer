@@ -36,7 +36,7 @@ int FillBuffer(HTTPReqMessage &req, int max, uint8_t *data, int remain)
 
 int total;
 int last;
-int readsize = 256;
+int readsize = 354;
 
 int bodycb(void *context, const uint8_t *buf, int len)
 {
@@ -169,5 +169,34 @@ TEST_F(HttpProtocolTest, Post_With_Postman)
     EXPECT_STREQ(req.Header.URI, "/v1/runners");
     EXPECT_EQ(req.bodyType, eTotalSize);
     EXPECT_EQ(total, 4126); // RAW size of Commando.sid
+    EXPECT_EQ(last, 0); // make sure the stream terminates
+}
+
+TEST_F(HttpProtocolTest, Post_Of_BMX)
+{
+    uint8_t *data = (uint8_t *)bmx;
+    int len = sizeof(bmx)-1; // remove trailing 0;
+
+    HTTPReqMessage req;
+    HTTPRespMessage resp;
+    InitReqMessage(&req);
+    InitRespMessage(&resp);
+    while(len) {
+        int sent = FillBuffer(req, readsize, data, len);
+        EXPECT_NE(0, sent);
+        uint8_t ret = ProcessClientData(&req, &resp, &callback);
+        if (sent == len) {
+            EXPECT_EQ(ret, WRITING_SOCKET);
+        } else {
+            EXPECT_EQ(ret, READING_SOCKET);
+        }
+        len -= sent;
+        data += sent;
+    }
+
+    EXPECT_EQ(req.Header.Method, HTTP_POST);
+    EXPECT_STREQ(req.Header.URI, "/v1/runners:sidplay");
+    EXPECT_EQ(req.bodyType, eChunked);
+    EXPECT_EQ(total, 11211); // RAW size of BMX
     EXPECT_EQ(last, 0); // make sure the stream terminates
 }

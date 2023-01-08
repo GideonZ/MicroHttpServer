@@ -7,7 +7,7 @@
 #include <unistd.h>
 
 #define HTTP_MAX_HEADER_SIZE (2048)
-#define HTTP_BUFFER_SIZE (2048)
+#define HTTP_BUFFER_SIZE (1024)
 
 #ifndef MHS_PORT
 #define MHS_PORT 80
