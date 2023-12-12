@@ -357,9 +357,13 @@ uint8_t ProcessClientData(HTTPReqMessage *req, HTTPRespMessage *resp, HTTPREQ_CA
                 req->BodyCB(req->BodyContext, NULL, 0);
             }
             // Switch to writing the response
-            resp->_buf[resp->_index] = '\0';
-            printf("Reponse:\n%s\n", resp->_buf);
-            return WRITING_SOCKET;
+            if(resp) {
+                resp->_buf[resp->_index] = '\0';
+                printf("Reponse:\n%s\n", resp->_buf);
+                return WRITING_SOCKET;
+            } else {
+                return CLOSE_SOCKET; // no response
+            }
         } else {
             return CLOSE_SOCKET; // error
         }
