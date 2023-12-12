@@ -151,7 +151,7 @@ void _ParseHeader(HTTPReqMessage *req)
     req->bodySize = 0;
     req->ContentType = NULL;
 
-    if (req->Header.Method == HTTP_POST) {
+    // if (req->Header.Method == HTTP_POST) {
         for (int i = 0; i < req->Header.FieldCount; i++) {
             if (_IsLengthHeader(req->Header.Fields[i].key)) {
                 req->bodyType = eTotalSize;
@@ -179,7 +179,7 @@ void _ParseHeader(HTTPReqMessage *req)
         if (req->bodyType == eNoBody) {
             req->bodyType = eUntilDisconnect;
         }
-    }
+    // }
     req->BodyCB = NULL; // to be filled in by the application
     req->BodyContext = NULL; // to be filled in by the application
 }

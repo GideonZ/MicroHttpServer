@@ -63,15 +63,63 @@ int read_socket(int sock, HTTPReqMessage *req)
     return n;
 }
 
-void attachment_block_debug(BodyDataBlock_t *block);
+typedef struct {
+    int offset;
+    int size;
+    uint8_t buffer[16384];
+} t_BufferedBody;
+
+void attachment_to_buffer(BodyDataBlock_t *block)
+{
+    HTTPHeaderField *f;
+    t_BufferedBody *body = (t_BufferedBody *)block->context;
+
+    switch(block->type) {
+        case eStart:
+            printf("--- Start of Body --- (Type: %s)\n", block->data);
+            break;
+        case eDataStart:
+            printf("--- Raw Data Start ---\n");
+            body->offset = 0;
+            body->size = 0;
+            break;
+        case eSubHeader:
+            printf("--- SubHeader ---\n");
+            f = (HTTPHeaderField *)block->data;
+            for(int i=0; i < block->length; i++) {
+                printf("%s => '%s'\n", f[i].key, f[i].value);
+            }
+            break;
+        case eDataBlock:
+            printf("--- Data (%d bytes)\n", block->length);
+            if (block->length < (16384 - body->offset)) {
+                memcpy(body->buffer + body->offset, block->data, block->length);
+                body->offset += block->length;
+                body->size += block->length;
+            }
+            break;
+        case eDataEnd:
+            printf("--- End of Data ---\n");
+            break;
+        case eTerminate:
+            printf("--- End of Body ---\n");
+            printf("Total size: %d\n", body->size);
+            break;
+    }
+}
+
 
 void process_it(HTTPReqMessage *req, HTTPRespMessage *resp)
 {
     printf("Process it! %d\n", req->protocol_state);
+    printf("callback: %p ", req->BodyCB);
+    printf("context: %p\n", req->BodyContext);
     printf("Used: %d. Valid %d. Content: %s\n", req->_used, req->_valid, req->ContentType);
-    if (!req->BodyCB) {
-        setup_multipart(req, &attachment_block_debug, NULL);
-    }
+
+    t_BufferedBody *body = (t_BufferedBody *)malloc(sizeof(t_BufferedBody));
+    body->offset = 0;
+    body->size = 0;
+    setup_multipart(req, &attachment_to_buffer, body);
 }
 
 void get_presets(int sock, HTTPReqMessage *resp)
@@ -94,11 +142,17 @@ void get_presets(int sock, HTTPReqMessage *resp)
             state = ProcessClientData(resp, NULL, process_it);
         }
     } while(state < WRITING_SOCKET);
+
+
+}
+
+extern "C" {
+    void outbyte(int c) { putc(c, stdout); }
 }
 
 int main(int argc, const char **argv)
 {
-    HTTPReqMessage *resp = malloc(sizeof(HTTPReqMessage));
+    HTTPReqMessage *resp = (HTTPReqMessage *)malloc(sizeof(HTTPReqMessage));
     memset(resp, 0, sizeof(HTTPReqMessage));
     int sock = connect_to_assembly();
     if (sock >= 0) {
