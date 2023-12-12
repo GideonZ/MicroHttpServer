@@ -5,6 +5,7 @@
 #include "server.h"
 #include "middleware.h"
 #include "multipart.h"
+#include "json.h"
 
 // http://hackerswithstyle.se/leet/search/aql?query=%28name%3A%22spacetaxi%22%29+%26+%28type%3Ad64%29+%26+%28category%3Agames%29
 
@@ -96,6 +97,8 @@ void attachment_to_buffer(BodyDataBlock_t *block)
                 memcpy(body->buffer + body->offset, block->data, block->length);
                 body->offset += block->length;
                 body->size += block->length;
+            } else {
+                printf("-> Ditched, buffer full.\n");
             }
             break;
         case eDataEnd:
@@ -109,17 +112,32 @@ void attachment_to_buffer(BodyDataBlock_t *block)
 }
 
 
-void process_it(HTTPReqMessage *req, HTTPRespMessage *resp)
+void collect_in_buffer(HTTPReqMessage *req, HTTPRespMessage *resp)
 {
-    printf("Process it! %d\n", req->protocol_state);
-    printf("callback: %p ", req->BodyCB);
-    printf("context: %p\n", req->BodyContext);
-    printf("Used: %d. Valid %d. Content: %s\n", req->_used, req->_valid, req->ContentType);
-
     t_BufferedBody *body = (t_BufferedBody *)malloc(sizeof(t_BufferedBody));
+    req->userContext = body;
     body->offset = 0;
     body->size = 0;
     setup_multipart(req, &attachment_to_buffer, body);
+}
+
+void get_response(int sock, HTTPReqMessage *resp, HTTPREQ_CALLBACK callback)
+{
+    uint8_t state = WRITING_SOCKET;
+    do {
+        int n = read_socket(sock, resp);
+        if (n) {
+            state = ProcessClientData(resp, NULL, callback);
+        }
+    } while(state < WRITING_SOCKET);
+}
+
+JSON *convert_buffer_to_json(t_BufferedBody *body)
+{
+    body->buffer[body->size] = 0;
+    JSON *json = NULL;
+    int j = convert_text_to_json_objects((char *)body->buffer, body->size, 1000, &json);
+    return json;
 }
 
 void get_presets(int sock, HTTPReqMessage *resp)
@@ -133,17 +151,33 @@ void get_presets(int sock, HTTPReqMessage *resp)
         "\r\n";
 
     int n = send(sock, request, strlen(request), MSG_DONTWAIT);
-    printf("Request sent (%d bytes)\n", n);
+    get_response(sock, resp, collect_in_buffer);
+    
+    JSON *json = convert_buffer_to_json((t_BufferedBody *)resp->userContext);
 
-    uint8_t state = WRITING_SOCKET;
-    do {
-        n = read_socket(sock, resp);
-        if (n) {
-            state = ProcessClientData(resp, NULL, process_it);
-        }
-    } while(state < WRITING_SOCKET);
+    if(json) {
+        printf(json->render());
+        free(json);
+    }
+    free(resp->userContext);
+}
 
+void get_binary(int sock, HTTPReqMessage *resp, const char *id, int cat, int binId)
+{
+    const char request_fmt[] = 
+        "GET " URL_DOWNLOAD "/%s/%d/%d HTTP/1.1\r\n"
+        "Accept-encoding: identity\r\n"
+        "Host: " HOSTNAME "\r\n"
+        "User-Agent: Ultimate\r\n"
+        "Connection: close\r\n"
+        "\r\n";
 
+    char req_buffer[256];
+    sprintf(req_buffer, request_fmt, id, cat, binId);
+
+    int n = send(sock, req_buffer, strlen(req_buffer), MSG_DONTWAIT);
+    get_response(sock, resp, collect_in_buffer);
+    free(resp->userContext);
 }
 
 extern "C" {
@@ -156,7 +190,8 @@ int main(int argc, const char **argv)
     memset(resp, 0, sizeof(HTTPReqMessage));
     int sock = connect_to_assembly();
     if (sock >= 0) {
-        get_presets(sock, resp);
+        //get_presets(sock, resp);
+        get_binary(sock, resp, "237033", 0, 0);
         close(sock);
     }
     free(resp);

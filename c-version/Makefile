@@ -18,4 +18,4 @@ assem: $(SRCS) lib/assembly.c
 	$(CPP) -c -I../../io/stream -I../../system -I../../components ../../api/json.cc -o json.o
 	$(CPP) -c -I../../components ../../components/mystring.cc -o string.o
 	$(CPP) -c -I../../system ../../system/small_printf.cc -o print.o
-	$(CPP) -DENABLE_STATIC_FILE -DMHS_PORT=1 lib/multipart.c lib/http_protocol.c lib/assembly.c print.o json.o string.o -o assem
+	$(CPP) -I../../api -I../../components -I../../system -I../../io/stream -DENABLE_STATIC_FILE -DMHS_PORT=1 lib/multipart.c lib/http_protocol.c lib/assembly.c print.o json.o string.o -o assem

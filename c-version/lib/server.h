@@ -92,6 +92,7 @@ typedef struct _HTTPReqMessage
     const char *ContentType;
     HTTPBODY_IN_CALLBACK BodyCB;
     void    *BodyContext;
+    void    *userContext;
     size_t   bodySize;
     t_BodyType bodyType;
     t_ChunkState chunkState;
