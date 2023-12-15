@@ -1,9 +1,5 @@
 
-#ifdef __cplusplus
-extern "C" {
-    #include "multipart.h"
-}
-#endif
+#include "multipart.h"
 #include <stdio.h>
 #include <string.h>
 

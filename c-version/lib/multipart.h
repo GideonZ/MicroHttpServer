@@ -3,6 +3,10 @@
 
 #include "server.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
     eStart = 0,
     eDataStart,
@@ -25,4 +29,7 @@ void setup_multipart(HTTPReqMessage *req, BODY_DATABLOCK_CB data_cb, void *data_
 
 void attachment_block_debug(BodyDataBlock_t *);
 
+#ifdef __cplusplus
+}
+#endif
 #endif
