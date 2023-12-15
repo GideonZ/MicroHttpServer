@@ -71,6 +71,7 @@ class Assembly64(object):
     
         # Parse and return the response.
         if response_data:
+            print(response_data.decode('utf-8'))
             if content_type == "application/json":
                 return json.loads(response_data.decode('utf-8'))
             elif content_type == "application/octet-stream":

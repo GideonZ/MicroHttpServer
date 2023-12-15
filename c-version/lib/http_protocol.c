@@ -36,6 +36,7 @@ void InitReqMessage(HTTPReqMessage *req)
     req->_used = 0;
     req->bodyType = eNoBody;
     req->bodySize = 0;
+    req->userContext = NULL;
     InitReqHeader(&(req->Header));
 }
 
@@ -152,20 +153,20 @@ void _ParseHeader(HTTPReqMessage *req)
     req->ContentType = NULL;
 
     // if (req->Header.Method == HTTP_POST) {
-        for (int i = 0; i < req->Header.FieldCount; i++) {
+        for (unsigned int i = 0; i < req->Header.FieldCount; i++) {
             if (_IsLengthHeader(req->Header.Fields[i].key)) {
                 req->bodyType = eTotalSize;
                 req->bodySize = strtol(req->Header.Fields[i].value, NULL, 0);
                 break;
             }
         }
-        for (int i = 0; i < req->Header.FieldCount; i++) {
+        for (unsigned int i = 0; i < req->Header.FieldCount; i++) {
             if (_IsTypeField(req->Header.Fields[i].key)) {
                 req->ContentType = req->Header.Fields[i].value;
                 break;
             }
         }
-        for (int i = 0; i < req->Header.FieldCount; i++) {
+        for (unsigned int i = 0; i < req->Header.FieldCount; i++) {
             if (_IsTransferEncoding(req->Header.Fields[i].key)) {
                 if (strstr(req->Header.Fields[i].value, "chunked") != NULL) {
                     req->bodyType = eChunked;
@@ -208,7 +209,7 @@ int _HandleChunked(HTTPReqMessage *req)
             if (n == 0) {
                 return 1;
             }
-            int available = (n > req->chunkRemain) ? req->chunkRemain : n;
+            int available = (n > (int)req->chunkRemain) ? (int)req->chunkRemain : n;
             if (req->BodyCB) {
                 req->BodyCB(req->BodyContext, p, available);
             } else {
@@ -241,7 +242,7 @@ int _HandleContentSize(HTTPReqMessage *req)
 {
     uint8_t *p = req->_buf + req->_used;
     int n = req->_valid - req->_used;
-    int available = (n > req->bodySize) ? req->bodySize : n;
+    int available = (n > (int)req->bodySize) ? (int)req->bodySize : n;
     if (req->BodyCB) {
         req->BodyCB(req->BodyContext, p, available);
     } else {

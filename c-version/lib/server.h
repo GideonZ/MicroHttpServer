@@ -24,6 +24,10 @@
 #define HTTP_SERVER "Micro CHTTP Server"
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef int SOCKET;
 
 // this function is called whenever there is body data to be processed.
@@ -151,6 +155,10 @@ void HTTPServerClose(HTTPServer *);
 #define DebugMsg(...) (printf(__VA_ARGS__))
 #else
 #define DebugMsg(...)
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

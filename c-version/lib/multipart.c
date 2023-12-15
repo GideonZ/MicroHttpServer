@@ -1,4 +1,9 @@
-#include "multipart.h"
+
+#ifdef __cplusplus
+extern "C" {
+    #include "multipart.h"
+}
+#endif
 #include <stdio.h>
 #include <string.h>
 
