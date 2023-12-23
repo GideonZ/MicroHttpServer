@@ -92,6 +92,7 @@ typedef enum {
 typedef struct _HTTPReqMessage
 {
     t_ProtocolRecvState protocol_state;
+    int usedAsResponseFromServer;
     HTTPReqHeader Header;
     const char *ContentType;
     HTTPBODY_IN_CALLBACK BodyCB;

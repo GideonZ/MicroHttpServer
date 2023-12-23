@@ -110,17 +110,18 @@ void _ParseHeader(HTTPReqMessage *req)
     // Step 2: Get the verb, path and HTTP identifier from the first line
     // Split by space
     // VERB path HTTP/1.1
-    char *cur = lines[0];
-    char *verb = strsep(&cur, " ");
-    req->Header.Method = HaveMethod(verb);
-    if (cur) {
-        req->Header.URI = strsep(&cur, " ");
-        req->Header.Version = cur; // can also be NULL
-    } else {
-        req->Header.URI = "";
-        req->Header.Version = NULL;
+    req->Header.URI = "";
+    req->Header.Version = NULL;
+    req->Header.Method = HTTP_UNKNOWN;
+    if (!req->usedAsResponseFromServer) {
+        char *cur = lines[0];
+        char *verb = strsep(&cur, " ");
+        req->Header.Method = HaveMethod(verb);
+        if (cur) {
+            req->Header.URI = strsep(&cur, " ");
+            req->Header.Version = cur; // can also be NULL
+        }
     }
-
     // Step 3: Split the remaining lines into fields.
     // All subsequent lines are in the form of KEY ": " VALUE, although the space is not mandatory by spec.
     // so leading spaces need to be trimmed, and the separator is simply ':'
@@ -152,7 +153,7 @@ void _ParseHeader(HTTPReqMessage *req)
     req->bodySize = 0;
     req->ContentType = NULL;
 
-    // if (req->Header.Method == HTTP_POST) {
+    if ((req->Header.Method == HTTP_POST) || (req->usedAsResponseFromServer)) {
         for (unsigned int i = 0; i < req->Header.FieldCount; i++) {
             if (_IsLengthHeader(req->Header.Fields[i].key)) {
                 req->bodyType = eTotalSize;
@@ -180,7 +181,7 @@ void _ParseHeader(HTTPReqMessage *req)
         if (req->bodyType == eNoBody) {
             req->bodyType = eUntilDisconnect;
         }
-    // }
+    }
     req->BodyCB = NULL; // to be filled in by the application
     req->BodyContext = NULL; // to be filled in by the application
 }

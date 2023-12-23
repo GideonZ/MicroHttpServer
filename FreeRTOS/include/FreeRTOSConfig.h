@@ -89,7 +89,7 @@
 	extern uint32_t SystemCoreClock;
 #endif
 
-#include "stm32f4xx.h"
+//#include "stm32f4xx.h"
 
 #define configUSE_PREEMPTION			1
 #define configUSE_IDLE_HOOK				0
