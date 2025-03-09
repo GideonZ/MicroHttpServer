@@ -92,7 +92,7 @@ void _ParseHeader(HTTPReqMessage *req)
     int line = 0;
     char *p = (char *)req->Header._buffer;
 
-    DebugMsg("\tParse Header\n");
+    // DebugMsg("\tParse Header\n");
 
     // First split the header buffer into lines by searching for the \r\n sequences
     // The method used here is to separate on \r and skip the following \n.
@@ -120,6 +120,7 @@ void _ParseHeader(HTTPReqMessage *req)
         if (cur) {
             req->Header.URI = strsep(&cur, " ");
             req->Header.Version = cur; // can also be NULL
+            DebugMsg("HTTP %s %s\n", verb, req->Header.URI ? req->Header.URI : "");
         }
     }
     // Step 3: Split the remaining lines into fields.
