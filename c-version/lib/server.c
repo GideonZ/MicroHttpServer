@@ -35,8 +35,10 @@ void HTTPServerInit(HTTPServer *srv, uint16_t port)
 
     /* Have a server socket. */
     srv->sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (srv->sock <= 0)
-        exit(1);
+    if (srv->sock < 0) {
+        DebugMsg("HTTPServerInit failed: no socket.\n");
+        return;
+    }
     /* Set server address. */
     memset(&srv_addr, 0, sizeof(srv_addr));
     srv_addr.sin_family = AF_INET;
@@ -46,7 +48,9 @@ void HTTPServerInit(HTTPServer *srv, uint16_t port)
     setsockopt(srv->sock, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
     /* Bind the server socket with the server address. */
     if (bind(srv->sock, (struct sockaddr *)&srv_addr, sizeof(srv_addr)) == -1) {
-        exit(1);
+        HTTPServerClose(srv);
+        DebugMsg("HTTPServerInit failed: bad bind.\n");
+        return;
     }
     /* Set the server socket non-blocking. */
     fcntl(srv->sock, F_SETFL, O_NONBLOCK);
@@ -160,6 +164,9 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
     //struct timeval timeout = {5, 5};
     uint16_t i;
 
+    if (srv->sock < 0)
+        return;
+
     /* Copy master socket queue to readable, writeable socket queue. */
     readable = srv->_read_sock_pool;
     writeable = srv->_write_sock_pool;
@@ -212,6 +219,9 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
 
 void HTTPServerClose(HTTPServer *srv)
 {
+    if (srv->sock < 0)
+        return;
     shutdown(srv->sock, SHUT_RDWR);
     close((srv)->sock);
+    srv->sock = -1;
 }

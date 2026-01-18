@@ -36,48 +36,48 @@ HTTPReq http_req[MAX_HTTP_CLIENT];
 uint8_t req_buf[MAX_HTTP_CLIENT][MAX_HEADER_SIZE + MAX_BODY_SIZE];
 uint8_t res_buf[MAX_HTTP_CLIENT][MAX_HEADER_SIZE + MAX_BODY_SIZE];
 
-void HTTPServerInit(HTTPServer *srv, uint16_t port)
-{
-    struct sockaddr_in srv_addr;
-    unsigned int i;
+void HTTPServerInit(HTTPServer *srv, uint16_t port) {
+	struct sockaddr_in srv_addr;
+	unsigned int i;
 
-    /* Have a server socket. */
-    srv->sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (srv->sock < 0) {
-        return;
-    }
-    /* Set server address. */
-    memset(&srv_addr, 0, sizeof(srv_addr));
-    srv_addr.sin_family = AF_INET;
-    srv_addr.sin_port = htons(port);
-    srv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    /* Set the server socket can reuse the address. */
-    setsockopt(srv->sock, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
-    /* Bind the server socket with the server address. */
-    if (bind(srv->sock, (struct sockaddr *)&srv_addr, sizeof(srv_addr)) == -1) {
-        return;
-    }
-    /* Set the server socket non-blocking. */
-    fcntl(srv->sock, F_SETFL, O_NONBLOCK);
+	/* Have a server socket. */
+	srv->sock = socket(AF_INET, SOCK_STREAM, 0);
+	if(srv->sock < 0)
+		return;
 
-    /* Start server socket listening. */
-    DebugMsg("Listening\n");
-    listen(srv->sock, MAX_HTTP_CLIENT);
+	/* Set server address. */
+	memset(&srv_addr, 0, sizeof(srv_addr));
+	srv_addr.sin_family = AF_INET;
+	srv_addr.sin_port = htons(port);
+	srv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+	/* Set the server socket can reuse the address. */
+	setsockopt(srv->sock, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+	/* Bind the server socket with the server address. */
+	if(bind(srv->sock, (struct sockaddr*) &srv_addr, sizeof(srv_addr)) == -1) {
+		HTTPServerClose(srv);
+		return;
+	}
+	/* Set the server socket non-blocking. */
+	fcntl(srv->sock, F_SETFL, O_NONBLOCK);
 
-    /* Append server socket to the master socket queue. */
-    FD_ZERO(&(srv->_read_sock_pool));
-    FD_ZERO(&(srv->_write_sock_pool));
-    FD_SET(srv->sock, &(srv->_read_sock_pool));
-    /* The server socket's FD is max in the master socket queue for now. */
-    srv->_max_sock = srv->sock;
+	/* Start server socket listening. */
+	DebugMsg("Listening\n");
+	listen(srv->sock, MAX_HTTP_CLIENT);
 
-    /* Prepare the HTTP client requests pool. */
-    for (i = 0; i < MAX_HTTP_CLIENT; i++) {
-        http_req[i].req._buf = req_buf[i];
-        http_req[i].res._buf = res_buf[i];
-        http_req[i].clisock = -1;
-        http_req[i].work_state = NOTWORK_SOCKET;
-    }
+	/* Append server socket to the master socket queue. */
+	FD_ZERO(&(srv->_read_sock_pool));
+	FD_ZERO(&(srv->_write_sock_pool));
+	FD_SET(srv->sock, &(srv->_read_sock_pool));
+	/* The server socket's FD is max in the master socket queue for now. */
+	srv->_max_sock = srv->sock;
+
+	/* Prepare the HTTP client requests pool. */
+	for(i=0; i<MAX_HTTP_CLIENT; i++) {
+		http_req[i].req._buf = req_buf[i];
+		http_req[i].res._buf = res_buf[i];
+		http_req[i].clisock = -1;
+		http_req[i].work_state = NOTWORK_SOCKET;
+	}
 }
 
 void _HTTPServerAccept(HTTPServer *srv) {
@@ -334,6 +334,9 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback) {
 	struct timeval timeout = {0, 0};
 	uint16_t i;
 
+	if (srv->sock < 0)
+		return;
+
 	/* Copy master socket queue to readable, writeable socket queue. */
 	readable = srv->_read_sock_pool;
 	writeable = srv->_write_sock_pool;
@@ -375,8 +378,11 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback) {
 }
 
 void HTTPServerClose(HTTPServer *srv) {
+	if (srv->sock < 0)
+		return;
 	shutdown(srv->sock, SHUT_RDWR);
 	close((srv)->sock);
+	srv->sock = -1;
 }
 
 #ifdef MICRO_HTTP_SERVER_EXAMPLE
