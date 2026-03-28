@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
-#include <sys/socket.h>
+//#include <sys/socket.h>
 
 #define IsReqWriting(s) (s == WRITING_SOCKET)
 #define IsReqReadEnd(s) (s == READEND_SOCKET)
