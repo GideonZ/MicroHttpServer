@@ -5,7 +5,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/select.h>
+#ifdef RUNS_ON_PC
+    #include <sys/select.h>
+#endif
 
 #define HTTP_MAX_HEADER_SIZE (2048)
 #define HTTP_BUFFER_SIZE (1024)
