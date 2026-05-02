@@ -68,8 +68,12 @@ typedef struct _HTTPReqHeader
     HTTPMethod Method;
     const char *URI;
     const char *Version;
+    const char *Response;
     HTTPHeaderField Fields[MAX_HEADER_FIELDS];
     unsigned int FieldCount;
+    void *RawCopy;
+    int RawCopySize;
+    int RawCopyLength;
 } HTTPReqHeader;
 
 typedef enum {

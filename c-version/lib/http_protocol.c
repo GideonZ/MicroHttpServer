@@ -25,6 +25,10 @@ void InitReqHeader(HTTPReqHeader *hdr)
     hdr->Method = HTTP_UNKNOWN;
     hdr->FieldCount = 0;
     hdr->URI = "";
+    hdr->Response = "";
+    hdr->RawCopy = NULL;
+    hdr->RawCopySize = 0;
+    hdr->RawCopyLength = 0;
 }
 
 void InitReqMessage(HTTPReqMessage *req)
@@ -111,17 +115,21 @@ void _ParseHeader(HTTPReqMessage *req)
     // Split by space
     // VERB path HTTP/1.1
     req->Header.URI = "";
+    req->Header.Response = "";
     req->Header.Version = NULL;
     req->Header.Method = HTTP_UNKNOWN;
+    char *cur = lines[0];
+    char *verb = strsep(&cur, " ");
     if (!req->usedAsResponseFromServer) {
-        char *cur = lines[0];
-        char *verb = strsep(&cur, " ");
         req->Header.Method = HaveMethod(verb);
         if (cur) {
             req->Header.URI = strsep(&cur, " ");
             req->Header.Version = cur; // can also be NULL
             DebugMsg("HTTP %s %s\n", verb, req->Header.URI ? req->Header.URI : "");
         }
+    } else { // response: store response code
+        // verb now holds the response code and explanation
+        req->Header.Response = cur;
     }
     // Step 3: Split the remaining lines into fields.
     // All subsequent lines are in the form of KEY ": " VALUE, although the space is not mandatory by spec.
@@ -310,6 +318,13 @@ int _GetHeader(HTTPReqMessage *req)
     int new_bytes_used;
     int until = _TestHeaderComplete(&req->Header);
     if (until >= 0) {
+        
+        // Application requires a raw copy of the header
+        if (hdr->RawCopy) {
+            hdr->RawCopyLength = (until <= hdr->RawCopySize) ? until : hdr->RawCopySize;
+            memcpy(hdr->RawCopy, hdr->_buffer, hdr->RawCopyLength);
+        }
+
         _ParseHeader(req); // Do we actually NEED to parse everything??
         new_bytes_used = until - valid; // old valid!
         req->protocol_state = eReq_HeaderDone;
