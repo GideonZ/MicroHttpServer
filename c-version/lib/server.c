@@ -186,9 +186,16 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
                 // ReadSock simply reads (the maximum amount of) data into the read buffer and returns
                 // a negative value if the socket errors out. In all other cases, the data is passed to
                 // the ProcessClientData function, which implements the HTTP protocol.
-                if (ReadSock(http_req + i) >= 0) {
+                int rd = ReadSock(http_req + i);
+                if (rd > 0) {
                     // processing client data may cause the socket to switch to write mode, or close.
                     http_req[i].work_state = ProcessClientData(&(http_req[i].req), &(http_req[i].res), callback);
+                } else {
+                    /* recv() returned <= 0: < 0 is a socket error/reset, 0 is peer EOF.
+                       Close the connection so its client slot is freed. Without this the
+                       slot leaks and the now-dead fd keeps waking select(), eventually
+                       driving available_connections to 0 and locking the server up. */
+                    http_req[i].work_state = CLOSE_SOCKET;
                 }
                 if (IsReqWriting(http_req[i].work_state)) {
                     FD_SET(http_req[i].clisock, &(srv->_write_sock_pool));
@@ -204,6 +211,14 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
             if (IsReqClose(http_req[i].work_state)) {
                 shutdown(http_req[i].clisock, SHUT_RDWR);
                 close(http_req[i].clisock);
+                /* Remove the now-closed fd from BOTH master pools. Clearing only
+                   the write pool leaks the fd in the read pool for any connection
+                   closed straight from the reading state (e.g. a read error/reset,
+                   which never passes through the writing state where the read pool
+                   is cleared). A closed fd left in the read set makes select()
+                   return immediately every iteration, so the server busy-spins and
+                   starves the rest of the TCP/IP stack. */
+                FD_CLR(http_req[i].clisock, &(srv->_read_sock_pool));
                 FD_CLR(http_req[i].clisock, &(srv->_write_sock_pool));
                 if (http_req[i].clisock >= srv->_max_sock)
                     srv->_max_sock -= 1;
