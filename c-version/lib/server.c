@@ -8,6 +8,11 @@
 #include <fcntl.h>
 #include <string.h>
 #include <sys/socket.h>
+#if LWIP == 1
+#include "lwip/sys.h"
+#else
+#include <time.h>
+#endif
 
 #define IsReqWriting(s) (s == WRITING_SOCKET)
 #define IsReqReadEnd(s) (s == READEND_SOCKET)
@@ -21,9 +26,20 @@ typedef struct _HTTPReq
     HTTPRespMessage res;
     size_t windex;
     uint8_t work_state;
+    uint32_t last_active_ms;
 } HTTPReq;
 
 HTTPReq http_req[MAX_HTTP_CLIENT];
+
+/* Millisecond clock used for per-connection idle timing. */
+static uint32_t _now_ms(void)
+{
+#if LWIP == 1
+    return (uint32_t)sys_now();
+#else
+    return (uint32_t)time(NULL) * 1000u;
+#endif
+}
 
 void HTTPServerInit(HTTPServer *srv, uint16_t port)
 {
@@ -104,6 +120,7 @@ void _HTTPServerAccept(HTTPServer *srv)
                 http_req[i].res.Header.FieldCount = 0;
                 http_req[i].windex = 0;
                 http_req[i].work_state = READING_SOCKET;
+                http_req[i].last_active_ms = _now_ms();
                 break;
             }
         }
@@ -161,7 +178,7 @@ void WriteSock(HTTPReq *hr)
 void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
 {
     fd_set readable, writeable;
-    //struct timeval timeout = {5, 5};
+    struct timeval timeout = { HTTP_CONN_IDLE_TIMEOUT, 0 };
     uint16_t i;
 
     if (srv->sock < 0)
@@ -170,9 +187,15 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
     /* Copy master socket queue to readable, writeable socket queue. */
     readable = srv->_read_sock_pool;
     writeable = srv->_write_sock_pool;
-    /* Wait the flag of any socket in readable socket queue. */
-    select(srv->_max_sock + 1, &readable, &writeable, NULL, NULL); // &timeout);
-    printf("$");
+    /* Wait for activity on any socket, but time out so idle/stuck client
+       connections can be reaped (see HTTP_CONN_IDLE_TIMEOUT). */
+    int nready = select(srv->_max_sock + 1, &readable, &writeable, NULL, &timeout);
+    if (nready < 0) {
+        /* select() failed (e.g. interrupted by a signal): the fd_sets are now
+           undefined, so do not inspect them this round. */
+        return;
+    }
+    uint32_t now = _now_ms();
     /* Check server socket is readable. */
     if (FD_ISSET(srv->sock, &readable) && (srv->available_connections > 0)) {
         /* Accept when server socket has been connected. */
@@ -181,7 +204,10 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
     /* Check sockets in HTTP client requests pool are readable. */
     for (i = 0; i < MAX_HTTP_CLIENT; i++) {
         if (http_req[i].clisock != -1) {
+            int active = 0;
             if (FD_ISSET(http_req[i].clisock, &readable)) {
+                http_req[i].last_active_ms = now;
+                active = 1;
                 /* Deal the request from the client socket. */
                 // ReadSock simply reads (the maximum amount of) data into the read buffer and returns
                 // a negative value if the socket errors out. In all other cases, the data is passed to
@@ -203,7 +229,20 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
                 }
             }
             if (IsReqWriting(http_req[i].work_state) && FD_ISSET(http_req[i].clisock, &writeable)) {
+                http_req[i].last_active_ms = now;
+                active = 1;
                 WriteSock(http_req + i);
+            }
+            /* Per-connection idle reaper: a connection that has seen no read or
+               write activity for HTTP_CONN_IDLE_TIMEOUT seconds is stuck (e.g. a
+               slowloris client that opened a slot then went silent). Reap it to
+               free the slot, even while other connections stay busy. The signed
+               difference is wrap-safe and, importantly, stays negative for a
+               connection just accepted this round whose timestamp is a hair ahead
+               of 'now', so a fresh connection is never reaped on arrival. */
+            if (!active &&
+                (int32_t)(now - http_req[i].last_active_ms) >= (int32_t)(HTTP_CONN_IDLE_TIMEOUT * 1000)) {
+                http_req[i].work_state = CLOSE_SOCKET;
             }
             if (IsReqWriteEnd(http_req[i].work_state)) {
                 http_req[i].work_state = CLOSE_SOCKET;

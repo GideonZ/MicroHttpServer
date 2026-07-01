@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #include "url.h"
 
@@ -27,9 +28,20 @@ void url_decode(char *src, char *dest, int max)
     char code[3] = {0};
     while (*p && --max) {
         if (*p == '%') {
-            memcpy(code, p + 1, 2);
-            *dest++ = (char)strtoul(code, NULL, 16);
-            p += 2;
+            // Only decode when two hex digits actually follow; otherwise copy the
+            // '%' literally. A truncated escape ("...%" / "...%A") otherwise made
+            // the scan run past the end of the string, reading and writing out of
+            // bounds until it hit a stray 0 byte. The p[1]/p[2] existence checks
+            // come first (short-circuit) so isxdigit() is never fed a byte past
+            // the terminating '\0'.
+            if (p[1] && p[2] && isxdigit((unsigned char)p[1]) && isxdigit((unsigned char)p[2])) {
+                code[0] = p[1];
+                code[1] = p[2];
+                *dest++ = (char)strtoul(code, NULL, 16);
+                p += 2;
+            } else {
+                *dest++ = *p;
+            }
         } else if (*p == '+') {
             *dest++ = ' ';
         } else {

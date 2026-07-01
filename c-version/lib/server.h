@@ -26,6 +26,14 @@
 #ifndef HTTP_SERVER
 #define HTTP_SERVER "Micro CHTTP Server"
 #endif
+/* Reap a client connection that has seen no read/write activity for this many
+   seconds. Each connection's idle time is tracked individually, so a few
+   opened-but-silent connections (slowloris) cannot occupy client slots forever,
+   even while other connections stay busy. One-shot requests complete in well
+   under a second, so only stuck/idle connections are affected. */
+#ifndef HTTP_CONN_IDLE_TIMEOUT
+#define HTTP_CONN_IDLE_TIMEOUT 15
+#endif
 
 #ifdef __cplusplus
 extern "C" {

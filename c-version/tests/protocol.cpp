@@ -200,3 +200,58 @@ TEST_F(HttpProtocolTest, Post_Of_BMX)
     EXPECT_EQ(total, 11211); // RAW size of BMX
     EXPECT_EQ(last, 0); // make sure the stream terminates
 }
+
+// A negative Content-Length must not drive the request into body processing.
+// Before the fix it became a huge size_t with bodyType=eTotalSize, so the body
+// callback was invoked with a zero-length chunk (treated as stream termination,
+// which can double-free the body absorber). It must be handled as "no body".
+TEST_F(HttpProtocolTest, Post_NegativeContentLength_NoBody)
+{
+    const char raw[] =
+        "POST /v1/configs HTTP/1.1\r\n"
+        "Host: x\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: -1\r\n"
+        "\r\n";
+    int len = (int)sizeof(raw) - 1; // drop trailing 0
+
+    HTTPReqMessage req;
+    HTTPRespMessage resp;
+    InitReqMessage(&req);
+    InitRespMessage(&resp);
+
+    int sent = FillBuffer(req, readsize, (uint8_t *)raw, len);
+    EXPECT_EQ(sent, len);
+    uint8_t ret = ProcessClientData(&req, &resp, &callback);
+
+    EXPECT_EQ(req.Header.Method, HTTP_POST);
+    EXPECT_EQ(req.bodyType, eNoBody);   // not eTotalSize with a bogus size
+    EXPECT_EQ(ret, WRITING_SOCKET);     // complete, not left waiting for a body
+    EXPECT_EQ(last, -1);                // body callback never invoked
+}
+
+// A zero Content-Length is a valid empty body: same "no body" handling, and in
+// particular no zero-length body callback.
+TEST_F(HttpProtocolTest, Post_ZeroContentLength_NoBody)
+{
+    const char raw[] =
+        "POST /v1/configs HTTP/1.1\r\n"
+        "Host: x\r\n"
+        "Content-Type: application/json\r\n"
+        "Content-Length: 0\r\n"
+        "\r\n";
+    int len = (int)sizeof(raw) - 1; // drop trailing 0
+
+    HTTPReqMessage req;
+    HTTPRespMessage resp;
+    InitReqMessage(&req);
+    InitRespMessage(&resp);
+
+    int sent = FillBuffer(req, readsize, (uint8_t *)raw, len);
+    EXPECT_EQ(sent, len);
+    uint8_t ret = ProcessClientData(&req, &resp, &callback);
+
+    EXPECT_EQ(req.bodyType, eNoBody);
+    EXPECT_EQ(ret, WRITING_SOCKET);
+    EXPECT_EQ(last, -1);
+}
