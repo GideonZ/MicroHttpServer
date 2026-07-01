@@ -139,6 +139,9 @@ void _ParseHeader(HTTPReqMessage *req)
         if (! *(lines[line])) {
             break;
         }
+        if (req->Header.FieldCount >= MAX_HEADER_FIELDS) {
+            break; // Fields[] is fixed-size; ignore any further header lines
+        }
         p = lines[line];
         req->Header.Fields[req->Header.FieldCount].key = strsep(&p, ":");
         if (p) {
@@ -163,10 +166,21 @@ void _ParseHeader(HTTPReqMessage *req)
     req->ContentType = NULL;
 
     if ((req->Header.Method == HTTP_POST) || (req->usedAsResponseFromServer)) {
+        int length_header_seen = 0;
         for (unsigned int i = 0; i < req->Header.FieldCount; i++) {
             if (_IsLengthHeader(req->Header.Fields[i].key)) {
-                req->bodyType = eTotalSize;
-                req->bodySize = strtol(req->Header.Fields[i].value, NULL, 0);
+                long len = strtol(req->Header.Fields[i].value, NULL, 0);
+                length_header_seen = 1;
+                // Only a positive Content-Length means there is a body. A negative
+                // value would become a huge size_t (and a negative (int) length in
+                // the body callback -> OOB copy); a zero length is simply no body.
+                // In both cases leave bodyType as eNoBody so the request is never
+                // driven into body processing: a 0-length body callback is treated
+                // as stream termination and can double-free the body absorber.
+                if (len > 0) {
+                    req->bodyType = eTotalSize;
+                    req->bodySize = (size_t)len;
+                }
                 break;
             }
         }
@@ -187,7 +201,10 @@ void _ParseHeader(HTTPReqMessage *req)
                 break;
             }
         }
-        if (req->bodyType == eNoBody) {
+        // Fall back to "read the body until the peer disconnects" only when the
+        // client gave no explicit framing at all. An explicit non-positive
+        // Content-Length means "no body", so it must not become eUntilDisconnect.
+        if ((req->bodyType == eNoBody) && !length_header_seen) {
             req->bodyType = eUntilDisconnect;
         }
     }
@@ -201,11 +218,12 @@ int _HandleChunked(HTTPReqMessage *req)
         if (req->chunkState == eChunkHeader) {
             char *chunkline = GetLineFromBuffer(req);
             if (chunkline) {
-                req->chunkRemain = strtol(chunkline, NULL, 16);
-                // DebugMsg("Chunkline read: '%s'; size = %d\n", chunkline, (int)req->chunkRemain);
-                if (req->chunkRemain == 0) {
-                    return 0; // done
+                long remain = strtol(chunkline, NULL, 16);
+                // DebugMsg("Chunkline read: '%s'; size = %d\n", chunkline, (int)remain);
+                if (remain <= 0) {
+                    return 0; // done, or reject a negative/invalid chunk size
                 }
+                req->chunkRemain = (size_t)remain;
                 req->chunkState = eChunkBody;
             } else {
                 DebugMsg("Chunkline could not be read. %d / %d\n", req->_used, req->_valid);

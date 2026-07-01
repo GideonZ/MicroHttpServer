@@ -142,6 +142,41 @@ TEST_F(RouteTest, ParseUrl_UnsupportedApiVersion) {
 }
 
 ///////////////////////////////////////////////////////////////
+//                  URL DECODE TESTS                         //
+///////////////////////////////////////////////////////////////
+
+TEST_F(RouteTest, UrlDecode_Percent20IsSpace) {
+    char in[] = "a%20b";
+    char out[16] = {0};
+    url_decode(in, out, sizeof(out));
+    EXPECT_EQ("a b", std::string(out));
+}
+
+TEST_F(RouteTest, UrlDecode_TrailingPercent_CopiedLiterally) {
+    // A lone trailing '%' must be copied literally and must not read past the
+    // end of the string.
+    char in[] = "abc%";
+    char out[16] = {0};
+    url_decode(in, out, sizeof(out));
+    EXPECT_EQ("abc%", std::string(out));
+}
+
+TEST_F(RouteTest, UrlDecode_TruncatedPercentOneHex_CopiedLiterally) {
+    // "%A" at the very end (only one hex digit follows) must also be literal.
+    char in[] = "abc%A";
+    char out[16] = {0};
+    url_decode(in, out, sizeof(out));
+    EXPECT_EQ("abc%A", std::string(out));
+}
+
+TEST_F(RouteTest, UrlDecode_NonHexAfterPercent_CopiedLiterally) {
+    char in[] = "a%zz";
+    char out[16] = {0};
+    url_decode(in, out, sizeof(out));
+    EXPECT_EQ("a%zz", std::string(out));
+}
+
+///////////////////////////////////////////////////////////////
 //                  QUERYSTRING TESTS                        //
 ///////////////////////////////////////////////////////////////
 
