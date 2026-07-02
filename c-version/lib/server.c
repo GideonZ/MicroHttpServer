@@ -166,8 +166,11 @@ void WriteSock(HTTPReq *hr)
         /* Writing is finished. */
         hr->work_state = WRITEEND_SOCKET;
     } else if ((errno == EAGAIN) || (errno == EWOULDBLOCK)) {
-        /* Send with non-blocking socket. */
-        hr->windex += hr->res._index - hr->windex;
+        /* Send buffer full on a non-blocking socket: nothing was sent, so leave
+           windex unchanged and retry the SAME bytes when the socket is writable
+           again. (Previously windex was advanced to res._index as if the buffer
+           had been sent, silently dropping the unsent tail and truncating large
+           responses to slow readers.) */
         hr->work_state = WRITING_SOCKET;
     } else {
         /* Send with error. */
@@ -248,6 +251,17 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
                 http_req[i].work_state = CLOSE_SOCKET;
             }
             if (IsReqClose(http_req[i].work_state)) {
+                /* If a request body was still being absorbed when the connection
+                   is torn down (client disconnect / idle reap mid-upload), tell
+                   the absorber to abort (len < 0) so it releases its buffers,
+                   open file handle and request context instead of leaking them.
+                   A completed body already cleared BodyCB (see ProcessClientData),
+                   so this is a no-op for normal, fully-received requests. */
+                if (http_req[i].req.BodyCB) {
+                    http_req[i].req.BodyCB(http_req[i].req.BodyContext, NULL, -1);
+                    http_req[i].req.BodyCB = NULL;
+                    http_req[i].req.BodyContext = NULL;
+                }
                 shutdown(http_req[i].clisock, SHUT_RDWR);
                 close(http_req[i].clisock);
                 /* Remove the now-closed fd from BOTH master pools. Clearing only

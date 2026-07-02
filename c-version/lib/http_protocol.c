@@ -391,11 +391,15 @@ uint8_t ProcessClientData(HTTPReqMessage *req, HTTPRespMessage *resp, HTTPREQ_CA
             // Send a Terminate
             if (req->BodyCB) {
                 req->BodyCB(req->BodyContext, NULL, 0);
+                /* The absorber freed itself on this terminate; clear the pointers
+                   so the connection-close path does not deliver a second (abort)
+                   callback to a freed context. */
+                req->BodyCB = NULL;
+                req->BodyContext = NULL;
             }
             // Switch to writing the response
             if(resp) {
                 resp->_buf[resp->_index] = '\0';
-                printf("Reponse:\n%s\n", resp->_buf);
                 return WRITING_SOCKET;
             } else {
                 return CLOSE_SOCKET; // no response

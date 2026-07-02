@@ -71,6 +71,10 @@ struct Parameter *parse_querystring(char *querystring_copy, size_t *parameters_l
     }
 
     parameters = (struct Parameter *)malloc(*parameters_len * sizeof(struct Parameter));
+    if (!parameters) {
+        *parameters_len = 0;
+        return NULL;
+    }
 
     int index = 0;
     while ((value = token = strsep(&querystring_copy, "&")) != NULL) {
@@ -117,11 +121,22 @@ int parse_url_static(const char *url, UrlComponents *components)
         url++;
 
     url_copy = token = url_start = strdup(url);
+    if (!url_copy)
+        return -1; // out of memory
     static const char *empty = "";
 
     // Consume apiversion first (a little dirty, but we need to handle it some way)
     components->apiversion = strsep(&token, "/");
-    url_start = token = url_start + strlen(components->apiversion) + 1;
+    // strsep leaves 'token' pointing just past the '/', or NULL when the URL has
+    // no '/' after the version (e.g. "/v1"). Use that pointer directly instead of
+    // recomputing it by hand: the old arithmetic ran one byte past the string
+    // terminator when there was no '/', reading out of bounds.
+    if (!token) {
+        components->apiversion = empty; // don't leave apiversion pointing into the freed copy
+        free(url_copy);
+        return -1; // nothing follows the version -> no route
+    }
+    url_start = token;
 
     for (int i = 0; supported_apiversions[i] != NULL; i++) {
         if (!strcmp(components->apiversion, supported_apiversions[i])) {
@@ -130,6 +145,7 @@ int parse_url_static(const char *url, UrlComponents *components)
     }
 
     if (!supported_version) {
+        components->apiversion = empty; // don't leave apiversion pointing into the freed copy
         free(url_copy);
         return -1; // Not supported
     }
@@ -168,13 +184,21 @@ UrlComponents *parse_url(const char *url)
 {
     // C-style 'new'.
     UrlComponents *components = (UrlComponents *)malloc(sizeof(UrlComponents));
+    if (!components)
+        return NULL;
     if (parse_url_static(url, components)) {
         free(components);
         return NULL;
     }
 
     components->querystring_copy = strdup(components->querystring);
-    components->parameters = parse_querystring(components->querystring_copy, &(components->parameters_len));
+    if (components->querystring_copy) {
+        components->parameters = parse_querystring(components->querystring_copy, &(components->parameters_len));
+    } else {
+        // Out of memory: no query parameters rather than parse_querystring(NULL).
+        components->parameters = NULL;
+        components->parameters_len = 0;
+    }
 
     return components;
 }
