@@ -124,6 +124,9 @@ void attachment_block_debug(BodyDataBlock_t *block)
         case eTerminate:
             printf("--- End of Body ---\n");
             break;
+        case eAbort:
+            printf("--- Body Aborted ---\n");
+            break;
     }
 }
 
@@ -143,6 +146,23 @@ static int filestream_in(void *context, const uint8_t *buf, int len)
     static const char c_header_end[5] = "\r\n\r\n";
     const char *b;
 
+    /* A negative length signals that the connection was torn down before the
+       body was fully received. Release everything (buffers, boundary, and the
+       downstream absorber via eAbort) WITHOUT running the incomplete request,
+       so an interrupted upload does not leak the stream, its file handle, or
+       the request context. */
+    if (len < 0) {
+        if (stream->block_cb) {
+            BodyDataBlock_t block = { eAbort, NULL, 0, stream->block_context };
+            stream->block_cb(&block);
+        }
+        if (stream->boundary) {
+            free(stream->boundary);
+        }
+        free(stream);
+        return len;
+    }
+
     switch (stream->state) {
         case eInit: // the first time that this function is called is to set it up
         // after the request header has been parsed. It is called without data.
@@ -155,16 +175,22 @@ static int filestream_in(void *context, const uint8_t *buf, int len)
                 if (b) {
                     len = strlen(b+9);
                     stream->boundary = (char *)malloc(len + 5); // \r\n-- + len + \r\n\0
-                    stream->boundary[0] = '\r';
-                    stream->boundary[1] = '\n';
-                    stream->boundary[2] = '-';
-                    stream->boundary[3] = '-';
-                    strcpy(stream->boundary + 4, b + 9);
-                    stream->boundary[len+4] = 0;
-                    stream->boundary_length = strlen(stream->boundary);
-                    stream->match_state = 2; // the data we receive starts with a boundary, but without the \r\n
-                    stream->state = eDitch;
-                    return 0;
+                    if (stream->boundary) {
+                        stream->boundary[0] = '\r';
+                        stream->boundary[1] = '\n';
+                        stream->boundary[2] = '-';
+                        stream->boundary[3] = '-';
+                        strcpy(stream->boundary + 4, b + 9);
+                        stream->boundary[len+4] = 0;
+                        stream->boundary_length = strlen(stream->boundary);
+                        stream->match_state = 2; // the data we receive starts with a boundary, but without the \r\n
+                        stream->state = eDitch;
+                        return 0;
+                    }
+                    /* Out of memory: fall through to the raw-binary path below so the
+                       downstream absorber still gets eDataStart and the body is treated
+                       as opaque, instead of dereferencing a NULL boundary. */
+                    len = 0;
                 } else {
                     printf("boundary not found in multipart\n");
                 }
@@ -222,8 +248,13 @@ static int filestream_in(void *context, const uint8_t *buf, int len)
                     } else if (stream->match_state != 0) {
                         switch(stream->state) {
                             case eHeader:
-                                memcpy(stream->header + stream->header_size, stream->boundary, stream->match_state);
-                                stream->header_size += stream->match_state;
+                                /* Bound the header buffer (_ParseMultiPartHeader uses header+2 and
+                                   writes a NUL at header[2+header_size]); drop bytes past capacity
+                                   instead of overflowing the FileStream_t struct. */
+                                if (stream->header_size + stream->match_state <= (int)sizeof(stream->header) - 3) {
+                                    memcpy(stream->header + stream->header_size, stream->boundary, stream->match_state);
+                                    stream->header_size += stream->match_state;
+                                }
                                 break;
                             case eData:
                                 // printf("copying boundary bytes to data %d (pos in data: %d)\n", stream->match_state, i);
@@ -269,7 +300,12 @@ static int filestream_in(void *context, const uint8_t *buf, int len)
                         }
                         break;
                     case eHeader:
-                        stream->header[stream->header_size++] = buf[i];
+                        /* Bound the header buffer (see note above); silently truncate an
+                           over-long part header rather than overflow into data[]/fields[]/
+                           the callback pointers. */
+                        if (stream->header_size < (int)sizeof(stream->header) - 3) {
+                            stream->header[stream->header_size++] = buf[i];
+                        }
                         break;
                     case eDitch:
                         break;
@@ -306,8 +342,15 @@ static int filestream_in(void *context, const uint8_t *buf, int len)
 
 void setup_multipart(HTTPReqMessage *req, BODY_DATABLOCK_CB data_cb, void *data_context)
 {
-    req->BodyCB = &filestream_in;
     FileStream_t *stream = (FileStream_t *)malloc(sizeof(FileStream_t));
+    if (!stream) {
+        /* Out of memory: leave no body callback so the body is ditched instead
+           of dereferencing a NULL stream. */
+        req->BodyCB = NULL;
+        req->BodyContext = NULL;
+        return;
+    }
+    req->BodyCB = &filestream_in;
     memset(stream, 0, sizeof(FileStream_t)); // also sets the state to eInit
     req->BodyContext = stream;
     stream->type = req->ContentType ? req->ContentType : "";

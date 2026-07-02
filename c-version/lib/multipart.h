@@ -14,6 +14,7 @@ typedef enum {
     eDataBlock,
     eDataEnd,
     eTerminate,
+    eAbort,
 } BlockType_t;
 
 typedef struct {

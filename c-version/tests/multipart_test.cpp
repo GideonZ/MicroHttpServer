@@ -72,6 +72,9 @@ void TestBodyCB(BodyDataBlock_t *block)
         case eTerminate:
             sprintf(temp, "End.\n");
             break;
+        case eAbort:
+            sprintf(temp, "Abort.\n");
+            break;
     }
     int n = strlen(temp);
     char *p = (char *)resp->_buf + resp->_index;
@@ -158,4 +161,67 @@ TEST_F(HttpMultipartTest, MultiPart2)
         "End.\n";
 
     EXPECT_STREQ((const char *)resp._buf, expected);
+}
+
+// A connection dropped mid-body delivers a negative length; the absorber must
+// forward eAbort and must NOT run the completion (eTerminate) path.
+TEST_F(HttpMultipartTest, MultiPartAbortMidBody)
+{
+    const char *data = strstr((const char *)post_rekwest, "\r\n\r\n") + 4;
+
+    HTTPReqMessage req;
+    HTTPRespMessage resp;
+    InitReqMessage(&req);
+    InitRespMessage(&resp);
+    req.ContentType = "multipart/form-data; boundary=5a8868354b79d47b-6e1ba8ed24fd99d1-25b65b0b92c4868d-d05927ea32311de5";
+
+    TestBody_t bodyContext;
+    bodyContext.msg = &resp;
+    setup_multipart(&req, &TestBodyCB, &bodyContext);
+
+    // Feed only the first chunk (a part is now in progress), then abort.
+    req.BodyCB(req.BodyContext, (const uint8_t *)data, 1000);
+    req.BodyCB(req.BodyContext, NULL, -1);
+    resp._buf[resp._index] = 0;
+
+    EXPECT_NE(strstr((const char *)resp._buf, "Abort.\n"), (const char *)NULL);
+    EXPECT_EQ(strstr((const char *)resp._buf, "End.\n"), (const char *)NULL);
+}
+
+// A part header longer than the 1024-byte header buffer must be truncated
+// safely (no overflow into data[]/fields[]/callbacks) and still parse and
+// terminate cleanly.
+TEST_F(HttpMultipartTest, MultiPartOverlongHeader)
+{
+    std::string longname(1500, 'A');
+    std::string body = "--X\r\n"
+        "Content-Disposition: form-data; name=\"f\"; filename=\"" + longname + "\"\r\n"
+        "\r\n"
+        "hello"
+        "\r\n--X--\r\n";
+
+    HTTPReqMessage req;
+    HTTPRespMessage resp;
+    InitReqMessage(&req);
+    InitRespMessage(&resp);
+    req.ContentType = "multipart/form-data; boundary=X";
+
+    TestBody_t bodyContext;
+    bodyContext.msg = &resp;
+    setup_multipart(&req, &TestBodyCB, &bodyContext);
+
+    int len = (int)body.size();
+    const char *p = body.c_str();
+    while (len) {
+        int send = (len < 256) ? len : 256;
+        req.BodyCB(req.BodyContext, (const uint8_t *)p, send);
+        len -= send;
+        p += send;
+    }
+    req.BodyCB(req.BodyContext, NULL, 0);
+    resp._buf[resp._index] = 0;
+
+    // The over-long header is truncated, so the part parses and the body still
+    // terminates without corruption or a crash.
+    EXPECT_NE(strstr((const char *)resp._buf, "End.\n"), (const char *)NULL);
 }
