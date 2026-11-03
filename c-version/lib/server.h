@@ -89,6 +89,8 @@ typedef enum {
     eReq_HeaderTooBig,
     eReq_HeaderDone,
     eReq_Body,
+    eReq_Complete,
+    eReq_Error,
 } t_ProtocolRecvState;
 
 typedef enum {
@@ -102,12 +104,17 @@ typedef enum {
     eChunkHeader,
     eChunkBody,
     eChunkTrailer,
+    eChunkFinalTrailer,
 } t_ChunkState;
 
 typedef struct _HTTPReqMessage
 {
     t_ProtocolRecvState protocol_state;
     int usedAsResponseFromServer;
+    int responseToHead;
+    unsigned int responseStatus;
+    unsigned int interimResponses;
+    unsigned int trailerBytes;
     HTTPReqHeader Header;
     const char *ContentType;
     HTTPBODY_IN_CALLBACK BodyCB;
@@ -145,6 +152,8 @@ void InitRespMessage(HTTPRespMessage *resp);
 
 typedef void (*HTTPREQ_CALLBACK)(HTTPReqMessage *, HTTPRespMessage *);
 uint8_t ProcessClientData(HTTPReqMessage *req, HTTPRespMessage *resp, HTTPREQ_CALLBACK callback);
+/* Signal authenticated/orderly transport EOF; never use for read errors. */
+int FinishClientResponse(HTTPReqMessage *req);
 
 void HTTPServerInit(HTTPServer *, uint16_t);
 void HTTPServerRun(HTTPServer *, HTTPREQ_CALLBACK);

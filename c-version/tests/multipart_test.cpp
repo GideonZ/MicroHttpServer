@@ -5,8 +5,6 @@
 
 #include "../lib/multipart.h"
 #include "attachment.c" // including the 'C' file avoids the need for header and extern
-#undef __cplusplus
-#include "../lib/dump_hex.h"
 
 class HttpMultipartTest : public ::testing::Test {
 protected:

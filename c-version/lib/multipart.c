@@ -51,7 +51,7 @@ typedef struct _FileStream
 static void _ParseMultiPartHeader(FileStream_t *stream)
 {
     char *p = (char *)stream->header + 2;
-    char *lines[8];
+    char *lines[8] = {0};
     int line = 0;
     p[stream->header_size] = 0;
 
@@ -63,7 +63,7 @@ static void _ParseMultiPartHeader(FileStream_t *stream)
             break;
         }
         p++; // skip the \n
-        if (! *(lines[line])) {
+        if (!lines[line] || ! *(lines[line])) {
             break;
         }
     }
@@ -74,7 +74,7 @@ static void _ParseMultiPartHeader(FileStream_t *stream)
     // so leading spaces need to be trimmed, and the separator is simply ':'
     int count = 0;
     for(line = 0; line < 8; line++) {
-        if (! *(lines[line])) {
+        if (!lines[line] || ! *(lines[line])) {
             break;
         }
         p = lines[line];
