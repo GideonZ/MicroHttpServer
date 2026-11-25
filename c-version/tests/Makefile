@@ -1,10 +1,15 @@
-all: route prot multi
+CXXFLAGS ?= -std=c++14 -g
+
+all: route prot multi response
 
 route:
-	g++ -std=c++14 -g route.cpp ../lib/url.c -lgtest -lgtest_main -lpthread -o routeTest && ./routeTest
+	$(CXX) $(CXXFLAGS) route.cpp ../lib/url.c -lgtest -lgtest_main -lpthread -o routeTest && ./routeTest
 
 prot:
-	g++ -std=c++14 -g protocol.cpp ../lib/http_protocol.c -lgtest -lgtest_main -lpthread -o protocolTest && ./protocolTest
+	$(CXX) $(CXXFLAGS) protocol.cpp ../lib/http_protocol.c -lgtest -lgtest_main -lpthread -o protocolTest && ./protocolTest
 
 multi:
-	g++ -std=c++14 -g multipart_test.cpp ../lib/dump_hex.c ../lib/multipart.c ../lib/http_protocol.c -lgtest -lgtest_main -lpthread -o multipartTest && ./multipartTest
+	$(CXX) $(CXXFLAGS) multipart_test.cpp ../lib/multipart.c ../lib/http_protocol.c -lgtest -lgtest_main -lpthread -o multipartTest && ./multipartTest
+
+response:
+	$(CXX) $(CXXFLAGS) response_test.cpp ../lib/http_protocol.c -lgtest -lgtest_main -lpthread -o responseTest && ./responseTest
