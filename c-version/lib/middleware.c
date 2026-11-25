@@ -55,6 +55,10 @@ static const char *get_mime_type(const char *filename)
 #if ENABLE_STATIC_FILE 
 int filestream_out(void *context, uint8_t *buf, int len)
 {
+    if (len < 0) { // connection gone before the file was sent to the end
+        fclose((FILE *)context);
+        return 0;
+    }
     int result = fread(buf, 1, len, (FILE *)context);
     if (!result) {
         fclose((FILE *)context);

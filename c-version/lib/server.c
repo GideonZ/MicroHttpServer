@@ -118,6 +118,9 @@ void _HTTPServerAccept(HTTPServer *srv)
                 InitReqMessage(&(http_req[i].req));
                 http_req[i].clisock = clisock;
                 http_req[i].res.Header.FieldCount = 0;
+                /* A slot reused after a client went away must not still carry that
+                   client's response body, or it would be streamed to this one. */
+                InitRespMessage(&(http_req[i].res));
                 http_req[i].windex = 0;
                 http_req[i].work_state = READING_SOCKET;
                 http_req[i].last_active_ms = _now_ms();
@@ -261,6 +264,15 @@ void HTTPServerRun(HTTPServer *srv, HTTPREQ_CALLBACK callback)
                     http_req[i].req.BodyCB(http_req[i].req.BodyContext, NULL, -1);
                     http_req[i].req.BodyCB = NULL;
                     http_req[i].req.BodyContext = NULL;
+                }
+                /* Likewise a response body that was not sent to the end (send
+                   error, idle reap, client reset): let the body source release
+                   its context (buffer, open file) instead of leaking it. A body
+                   that ran to the end cleared BodyCB in WriteSock. */
+                if (http_req[i].res.BodyCB) {
+                    http_req[i].res.BodyCB(http_req[i].res.BodyContext, NULL, -1);
+                    http_req[i].res.BodyCB = NULL;
+                    http_req[i].res.BodyContext = NULL;
                 }
                 shutdown(http_req[i].clisock, SHUT_RDWR);
                 close(http_req[i].clisock);

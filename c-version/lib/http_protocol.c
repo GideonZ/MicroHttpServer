@@ -53,6 +53,7 @@ void InitReqMessage(HTTPReqMessage *req)
 void InitRespMessage(HTTPRespMessage *resp)
 {
     resp->BodyCB = NULL;
+    resp->BodyContext = NULL;
     resp->_index = 0;
 }
 
